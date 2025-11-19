@@ -10,7 +10,7 @@ import BillManager from './components/BillManager';
 import AssetManager from './components/AssetManager';
 import UserManager from './components/UserManager';
 import Login from './components/Login';
-import { Bell, Shield, User as UserIcon, AlertCircle, CheckCircle } from 'lucide-react';
+import { Bell, Shield, User as UserIcon, AlertCircle, CheckCircle, Moon, Sun, Menu } from 'lucide-react';
 import { Role, User, Notification } from './types';
 import { dormService } from './services/dormService';
 
@@ -20,6 +20,32 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // Dark mode state with safe initialization
+  const [darkMode, setDarkMode] = useState(() => {
+      if (typeof window !== 'undefined') {
+          const saved = localStorage.getItem('theme_mode');
+          // Prefer saved preference, otherwise fall back to system preference if needed
+          return saved === 'dark';
+      }
+      return false;
+  });
+
+  useEffect(() => {
+      const root = window.document.documentElement;
+      if (darkMode) {
+          root.classList.add('dark');
+          localStorage.setItem('theme_mode', 'dark');
+      } else {
+          root.classList.remove('dark');
+          localStorage.setItem('theme_mode', 'light');
+      }
+  }, [darkMode]);
+
+  const toggleDarkMode = () => {
+      setDarkMode(prev => !prev);
+  };
 
   // Check for session on load
   useEffect(() => {
@@ -79,73 +105,84 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#f3f4f6]">
+    <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-200">
       <Sidebar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={(tab) => { setActiveTab(tab); setIsMobileMenuOpen(false); }} 
         role={currentUser.role} 
         onLogout={handleLogout}
+        isOpen={isMobileMenuOpen}
+        onClose={() => setIsMobileMenuOpen(false)}
       />
       
       <main className="flex-1 flex flex-col max-w-[100vw] overflow-x-hidden">
         {/* Mobile Header */}
-        <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center md:hidden">
-          <h1 className="text-lg font-bold text-indigo-600">QL Phòng Trọ</h1>
-          <button className="p-2 rounded-full bg-gray-100 text-gray-600">
-             <span className="sr-only">Menu</span>
-             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center md:hidden sticky top-0 z-30">
+          <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">QL Phòng Trọ</h1>
+          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200">
+             <Menu size={24}/>
           </button>
         </div>
 
-        {/* Top Bar */}
-        <header className="bg-white/80 backdrop-blur-md border-b border-gray-200 h-16 px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="text-sm text-gray-500 font-medium">
+        {/* Top Bar (Desktop) */}
+        <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 h-16 px-6 flex items-center justify-between sticky top-0 z-20 hidden md:flex transition-colors duration-200">
+          <div className="text-sm text-gray-500 dark:text-gray-400 font-medium">
              Năm học 2023-2024
           </div>
           <div className="flex items-center gap-4">
+            
+            {/* Theme Toggle */}
+            <button 
+                onClick={toggleDarkMode} 
+                className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+                title={darkMode ? "Chuyển sang chế độ Sáng" : "Chuyển sang chế độ Tối"}
+            >
+                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+
             {/* Notification Bell */}
             <div className="relative">
                 <button 
                     onClick={() => setShowNotifications(!showNotifications)}
-                    className="relative p-2 text-gray-500 hover:bg-gray-100 rounded-full transition-colors outline-none"
+                    className="relative p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors outline-none"
                 >
                 <Bell size={20} />
                 {notifications.length > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white animate-pulse"></span>
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white dark:ring-gray-800 animate-pulse"></span>
                 )}
                 </button>
                 
                 {showNotifications && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-30 animate-fade-in">
-                        <div className="p-3 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-                            <h3 className="font-bold text-gray-700 text-sm">Thông báo</h3>
-                            <span className="text-xs text-gray-500">{notifications.length} chưa đọc</span>
+                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden z-30 animate-fade-in origin-top-right">
+                        <div className="p-3 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 flex justify-between items-center">
+                            <h3 className="font-bold text-gray-700 dark:text-gray-200 text-sm">Thông báo</h3>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{notifications.length} chưa đọc</span>
                         </div>
-                        <div className="max-h-[300px] overflow-y-auto">
+                        <div className="max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
                             {notifications.length === 0 ? (
                                 <div className="p-4 text-center text-gray-400 text-sm">
                                     <CheckCircle size={24} className="mx-auto mb-2 opacity-30"/>
                                     Không có thông báo mới
                                 </div>
                             ) : (
-                                <div className="divide-y divide-gray-50">
+                                <div className="divide-y divide-gray-50 dark:divide-gray-700">
                                     {notifications.map(notif => (
                                         <div 
                                             key={notif.id} 
-                                            className={`p-3 flex items-start gap-3 hover:bg-gray-50 transition-colors cursor-pointer ${notif.type === 'danger' ? 'bg-red-50/30' : ''}`}
+                                            className={`p-3 flex items-start gap-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer ${notif.type === 'danger' ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}
                                             onClick={() => {
                                                 setActiveTab('bills');
                                                 setShowNotifications(false);
                                             }}
                                         >
-                                            <div className={`mt-1 p-1 rounded-full flex-shrink-0 ${notif.type === 'danger' ? 'text-red-500 bg-red-100' : 'text-orange-500 bg-orange-100'}`}>
+                                            <div className={`mt-1 p-1 rounded-full flex-shrink-0 ${notif.type === 'danger' ? 'text-red-500 bg-red-100 dark:bg-red-900/20' : 'text-orange-500 bg-orange-100 dark:bg-orange-900/20'}`}>
                                                 <AlertCircle size={14} />
                                             </div>
                                             <div>
-                                                <p className={`text-sm ${notif.type === 'danger' ? 'text-red-700 font-medium' : 'text-gray-700'}`}>
+                                                <p className={`text-sm ${notif.type === 'danger' ? 'text-red-700 dark:text-red-400 font-medium' : 'text-gray-700 dark:text-gray-200'}`}>
                                                     {notif.message}
                                                 </p>
-                                                <p className="text-xs text-gray-400 mt-1">{notif.timestamp}</p>
+                                                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{notif.timestamp}</p>
                                             </div>
                                         </div>
                                     ))}
@@ -156,12 +193,12 @@ const App: React.FC = () => {
                 )}
             </div>
             
-            <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
+            <div className="flex items-center gap-3 pl-4 border-l border-gray-200 dark:border-gray-700">
               <div className="text-right hidden sm:block">
-                <p className="text-sm font-semibold text-gray-900">{currentUser.fullName}</p>
-                <p className="text-xs text-gray-500">{currentUser.role === Role.ADMIN ? 'Quản trị viên' : 'Nhân viên'}</p>
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{currentUser.fullName}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{currentUser.role === Role.ADMIN ? 'Quản trị viên' : 'Nhân viên'}</p>
               </div>
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md ring-2 ring-white dark:ring-gray-800">
                 {currentUser.role === Role.ADMIN ? <Shield size={18}/> : <UserIcon size={18}/>}
               </div>
             </div>
@@ -170,7 +207,7 @@ const App: React.FC = () => {
 
         {/* Main Content Area */}
         <div 
-            className="flex-1 p-6 md:p-8 mx-auto w-full overflow-y-auto"
+            className="flex-1 p-4 md:p-8 mx-auto w-full overflow-y-auto scroll-smooth"
             onClick={() => setShowNotifications(false)} 
         >
           {renderContent()}

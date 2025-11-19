@@ -75,29 +75,30 @@ class DormService {
       const notifications: Notification[] = [];
       const today = new Date();
       
-      this.bills.forEach(bill => {
-          if (bill.status === 'UNPAID') {
-              const dueDate = new Date(bill.dueDate);
-              const diffTime = dueDate.getTime() - today.getTime();
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-              
-              const roomName = this.rooms.find(r => r.id === bill.roomId)?.name || bill.roomId;
+      // Only scan UNPAID bills
+      const unpaidBills = this.bills.filter(b => b.status === 'UNPAID');
 
-              if (diffDays < 0) {
-                  notifications.push({
-                      id: `notif-overdue-${bill.id}`,
-                      type: 'danger',
-                      message: `Phòng ${roomName} quá hạn thanh toán ${Math.abs(diffDays)} ngày.`,
-                      timestamp: 'Vừa xong'
-                  });
-              } else if (diffDays <= 3) {
-                  notifications.push({
-                      id: `notif-warn-${bill.id}`,
-                      type: 'warning',
-                      message: `Phòng ${roomName} sắp hết hạn thanh toán (còn ${diffDays} ngày).`,
-                      timestamp: 'Hôm nay'
-                  });
-              }
+      unpaidBills.forEach(bill => {
+          const dueDate = new Date(bill.dueDate);
+          const diffTime = dueDate.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          
+          const roomName = this.rooms.find(r => r.id === bill.roomId)?.name || bill.roomId;
+
+          if (diffDays < 0) {
+              notifications.push({
+                  id: `notif-overdue-${bill.id}`,
+                  type: 'danger',
+                  message: `Phòng ${roomName} quá hạn thanh toán ${Math.abs(diffDays)} ngày.`,
+                  timestamp: 'Vừa xong'
+              });
+          } else if (diffDays <= 3) {
+              notifications.push({
+                  id: `notif-warn-${bill.id}`,
+                  type: 'warning',
+                  message: `Phòng ${roomName} sắp hết hạn thanh toán (còn ${diffDays} ngày).`,
+                  timestamp: 'Hôm nay'
+              });
           }
       });
 
@@ -146,14 +147,12 @@ class DormService {
 
   // --- DASHBOARD ---
   public getDashboardStats(): DashboardStats {
-    // Recalculate everything fresh to ensure accuracy
     const totalRooms = this.rooms.length;
     let occupiedRooms = 0;
     let fullRooms = 0;
     let availableRooms = 0;
 
     this.rooms.forEach(room => {
-      // Double check capacity
       const actualStudents = this.students.filter(s => s.roomId === room.id).length;
       const actualGuests = this.guests.filter(g => g.roomId === room.id).length;
       const actualCapacity = actualStudents + actualGuests;
@@ -161,7 +160,7 @@ class DormService {
       if (actualCapacity > 0) occupiedRooms++;
       
       if (room.status === RoomStatus.MAINTENANCE) {
-          // Maintenance rooms are not "Available"
+          // Maintenance logic
       } else if (actualCapacity >= room.maxCapacity) {
           fullRooms++;
       } else {
@@ -170,7 +169,7 @@ class DormService {
     });
 
     const totalSlots = this.rooms.reduce((acc, r) => acc + r.maxCapacity, 0);
-    const usedSlots = this.students.length + this.guests.length; // Use actual lists
+    const usedSlots = this.students.length + this.guests.length;
     const occupancyRate = totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
 
     return {
@@ -188,6 +187,9 @@ class DormService {
     const revenueMap: Record<string, MonthlyRevenue> = {};
 
     this.bills.forEach(bill => {
+        // Only count revenue if bill is PAID? Or count all as accrual? 
+        // Usually dashboard shows accrued revenue, or we can filter. 
+        // Let's show all for now, maybe highlight paid vs unpaid in future.
         const monthKey = bill.month; 
         if (!revenueMap[monthKey]) {
             revenueMap[monthKey] = {
@@ -285,6 +287,7 @@ class DormService {
     const room = this.rooms.find(r => r.id === id);
     if (!room) return { success: false, message: "Phòng không tồn tại" };
 
+    // Strictly check actual occupants
     const studentCount = this.students.filter(s => s.roomId === id).length;
     const guestCount = this.guests.filter(g => g.roomId === id).length;
 
@@ -292,13 +295,9 @@ class DormService {
         return { success: false, message: `Không thể xóa. Phòng đang có ${studentCount} sinh viên và ${guestCount} khách. Vui lòng xóa người trước.` };
     }
     
-    // Cascading Delete: Clean up related assets and bills
-    const assetsBefore = this.assets.length;
+    // Cascading Delete
     this.assets = this.assets.filter(a => a.roomId !== id);
-    const billsBefore = this.bills.length;
     this.bills = this.bills.filter(b => b.roomId !== id); 
-
-    console.log(`[SYSTEM] Cascading delete for Room ${room.name}: Removed ${assetsBefore - this.assets.length} assets and ${billsBefore - this.bills.length} bills.`);
     
     this.rooms = this.rooms.filter(r => r.id !== id);
     this.saveToStorage();
@@ -364,11 +363,11 @@ class DormService {
     const roomId = student.roomId;
     this.students = this.students.filter(s => s.id !== id);
     
-    // Update capacity and potentially status
+    // Update capacity
     this.updateRoomCapacity(roomId);
 
     this.saveToStorage();
-    return { success: true, message: "Đã xóa sinh viên khỏi danh sách." };
+    return { success: true, message: "Đã xóa sinh viên." };
   }
 
   // --- GUESTS ---
@@ -423,7 +422,6 @@ class DormService {
      const roomId = guest.roomId;
      this.guests = this.guests.filter(g => g.id !== id);
      
-     // Correctly update room capacity immediately
      this.updateRoomCapacity(roomId);
      
      this.saveToStorage();
@@ -447,8 +445,6 @@ class DormService {
               newStatus = RoomStatus.AVAILABLE;
           }
       }
-
-      console.log(`[SYSTEM] Updated Room ${this.rooms[idx].name}: Capacity ${this.rooms[idx].currentCapacity} -> ${newCapacity}, Status -> ${newStatus}`);
 
       this.rooms[idx] = { 
           ...this.rooms[idx], 
@@ -546,11 +542,15 @@ class DormService {
       console.log(`[POST] /api/bills/${id}/pay`);
       const idx = this.bills.findIndex(b => b.id === id);
       if(idx > -1) {
+          // Update status
           this.bills[idx].status = 'PAID';
+          // Optional: You could add a 'paidAt' field to the Bill type if you want strict tracking
+          // this.bills[idx].paidAt = new Date().toISOString(); 
+          
           this.saveToStorage();
-          return { success: true };
+          return { success: true, message: "Xác nhận thanh toán thành công." };
       }
-      return { success: false };
+      return { success: false, message: "Hóa đơn không tìm thấy." };
   }
 }
 
