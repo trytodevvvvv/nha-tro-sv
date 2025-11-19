@@ -33,6 +33,9 @@ class DormService {
         this.assets = storedAssets ? JSON.parse(storedAssets) : [];
         this.bills = storedBills ? JSON.parse(storedBills) : [];
         this.users = storedUsers ? JSON.parse(storedUsers) : [];
+        
+        // Recalculate on load to ensure data consistency
+        this.recalculateAllRoomCapacities();
     } else {
         console.log('[SYSTEM] Initializing with Mock Data...');
         this.rooms = [...MOCK_ROOMS];
@@ -58,16 +61,42 @@ class DormService {
     localStorage.setItem('dorm_users', JSON.stringify(this.users));
   }
 
+  // --- CORE LOGIC: CAPACITY & STATUS UPDATE ---
+  // This is the single source of truth for room status logic
+  private updateRoomCapacity(roomId: string): void {
+      const idx = this.rooms.findIndex(r => r.id === roomId);
+      if (idx === -1) return;
+
+      // 1. Calculate actual occupants
+      const studentCount = this.students.filter(s => s.roomId === roomId).length;
+      const guestCount = this.guests.filter(g => g.roomId === roomId).length;
+      const newCurrentCapacity = studentCount + guestCount;
+      
+      // 2. Determine new status
+      let newStatus = this.rooms[idx].status;
+      
+      // Only update status automatically if NOT in maintenance mode
+      if (this.rooms[idx].status !== RoomStatus.MAINTENANCE) {
+          if (newCurrentCapacity >= this.rooms[idx].maxCapacity) {
+              newStatus = RoomStatus.FULL;
+          } else {
+              newStatus = RoomStatus.AVAILABLE;
+          }
+      }
+
+      // 3. Update the room object in memory
+      this.rooms[idx] = { 
+          ...this.rooms[idx], 
+          currentCapacity: newCurrentCapacity, 
+          status: newStatus 
+      };
+  }
+
   private recalculateAllRoomCapacities() {
     this.rooms.forEach(room => {
-        const studentCount = this.students.filter(s => s.roomId === room.id).length;
-        const guestCount = this.guests.filter(g => g.roomId === room.id).length;
-        room.currentCapacity = studentCount + guestCount;
-        
-        if (room.status !== RoomStatus.MAINTENANCE) {
-            room.status = room.currentCapacity >= room.maxCapacity ? RoomStatus.FULL : RoomStatus.AVAILABLE;
-        }
+        this.updateRoomCapacity(room.id);
     });
+    this.saveToStorage(); // Save cleaned data
   }
 
   // --- NOTIFICATIONS ---
@@ -75,7 +104,6 @@ class DormService {
       const notifications: Notification[] = [];
       const today = new Date();
       
-      // Only scan UNPAID bills
       const unpaidBills = this.bills.filter(b => b.status === 'UNPAID');
 
       unpaidBills.forEach(bill => {
@@ -117,7 +145,6 @@ class DormService {
   }
 
   public addUser(user: Omit<User, 'id'>): { success: boolean, message: string } {
-      console.log(`[POST] /api/users`, user);
       if (this.users.some(u => u.username === user.username)) {
           return { success: false, message: "Tên đăng nhập đã tồn tại" };
       }
@@ -128,7 +155,6 @@ class DormService {
   }
 
   public updateUser(id: string, data: Partial<User>) {
-      console.log(`[PUT] /api/users/${id}`, data);
       const idx = this.users.findIndex(u => u.id === id);
       if (idx === -1) return { success: false, message: "Người dùng không tồn tại" };
       
@@ -138,7 +164,6 @@ class DormService {
   }
 
   public deleteUser(id: string) {
-      console.log(`[DELETE] /api/users/${id}`);
       if (this.users.length <= 1) return { success: false, message: "Không thể xóa tài khoản cuối cùng." };
       this.users = this.users.filter(u => u.id !== id);
       this.saveToStorage();
@@ -153,9 +178,8 @@ class DormService {
     let availableRooms = 0;
 
     this.rooms.forEach(room => {
-      const actualStudents = this.students.filter(s => s.roomId === room.id).length;
-      const actualGuests = this.guests.filter(g => g.roomId === room.id).length;
-      const actualCapacity = actualStudents + actualGuests;
+      // Rely on pre-calculated currentCapacity for speed, but could double-check here
+      const actualCapacity = room.currentCapacity;
 
       if (actualCapacity > 0) occupiedRooms++;
       
@@ -187,9 +211,6 @@ class DormService {
     const revenueMap: Record<string, MonthlyRevenue> = {};
 
     this.bills.forEach(bill => {
-        // Only count revenue if bill is PAID? Or count all as accrual? 
-        // Usually dashboard shows accrued revenue, or we can filter. 
-        // Let's show all for now, maybe highlight paid vs unpaid in future.
         const monthKey = bill.month; 
         if (!revenueMap[monthKey]) {
             revenueMap[monthKey] = {
@@ -214,7 +235,6 @@ class DormService {
   public getBuildings() { return this.buildings; }
   
   public addBuilding(name: string) {
-    console.log(`[POST] /api/buildings`, { name });
     const newBuilding = { id: `b${Date.now()}`, name };
     this.buildings.push(newBuilding);
     this.saveToStorage();
@@ -222,7 +242,6 @@ class DormService {
   }
 
   public updateBuilding(id: string, name: string) {
-    console.log(`[PUT] /api/buildings/${id}`, { name });
     const idx = this.buildings.findIndex(b => b.id === id);
     if (idx > -1) {
         this.buildings[idx].name = name;
@@ -233,7 +252,6 @@ class DormService {
   }
 
   public deleteBuilding(id: string) {
-    console.log(`[DELETE] /api/buildings/${id}`);
     const hasRooms = this.rooms.some(r => r.buildingId === id);
     if(hasRooms) return { success: false, message: "Không thể xóa tòa nhà này vì vẫn còn phòng đang hoạt động."};
     
@@ -246,44 +264,32 @@ class DormService {
   public getRooms() { return this.rooms; }
 
   public addRoom(room: Omit<Room, 'id' | 'currentCapacity'>) {
-    console.log(`[POST] /api/rooms`, room);
     const newRoom: Room = {
       id: `r${Date.now()}`,
       currentCapacity: 0,
       ...room
     };
     this.rooms.push(newRoom);
+    // Initial capacity check not needed as it's 0, but good practice if we allowed prepopulating
     this.saveToStorage();
     return { success: true, room: newRoom };
   }
 
   public updateRoom(id: string, data: Partial<Room>) {
-    console.log(`[PUT] /api/rooms/${id}`, data);
     const idx = this.rooms.findIndex(r => r.id === id);
     if (idx === -1) return { success: false, message: "Không tìm thấy phòng" };
     
-    const updatedRoom = { ...this.rooms[idx], ...data };
+    // Update properties
+    this.rooms[idx] = { ...this.rooms[idx], ...data };
     
-    // Validate Capacity Logic
-    const actualStudents = this.students.filter(s => s.roomId === id).length;
-    const actualGuests = this.guests.filter(g => g.roomId === id).length;
-    updatedRoom.currentCapacity = actualStudents + actualGuests;
+    // Crucial: Recalculate capacity and status because maxCapacity or status might have changed
+    this.updateRoomCapacity(id);
 
-    if (updatedRoom.status !== RoomStatus.MAINTENANCE) {
-       if (updatedRoom.currentCapacity >= updatedRoom.maxCapacity) {
-           updatedRoom.status = RoomStatus.FULL;
-       } else {
-           updatedRoom.status = RoomStatus.AVAILABLE;
-       }
-    }
-
-    this.rooms[idx] = updatedRoom;
     this.saveToStorage();
     return { success: true };
   }
 
   public deleteRoom(id: string) {
-    console.log(`[DELETE] /api/rooms/${id}`);
     const room = this.rooms.find(r => r.id === id);
     if (!room) return { success: false, message: "Phòng không tồn tại" };
 
@@ -312,7 +318,6 @@ class DormService {
   }
 
   public addStudent(studentData: Omit<Student, 'id'>): { success: boolean; message: string } {
-    console.log(`[POST] /api/students`, studentData);
     const roomIndex = this.rooms.findIndex(r => r.id === studentData.roomId);
     if (roomIndex === -1) return { success: false, message: "Phòng không tồn tại" };
     
@@ -329,7 +334,6 @@ class DormService {
   }
 
   public updateStudent(id: string, data: Partial<Student>) {
-      console.log(`[PUT] /api/students/${id}`, data);
       const idx = this.students.findIndex(s => s.id === id);
       if (idx === -1) return { success: false, message: "Không tìm thấy sinh viên" };
 
@@ -356,14 +360,15 @@ class DormService {
   }
 
   public deleteStudent(id: string) {
-    console.log(`[DELETE] /api/students/${id}`);
     const student = this.students.find(s => s.id === id);
     if (!student) return { success: false, message: "Sinh viên không tồn tại" };
 
     const roomId = student.roomId;
+    
+    // Remove student
     this.students = this.students.filter(s => s.id !== id);
     
-    // Update capacity
+    // Update capacity of the room they left
     this.updateRoomCapacity(roomId);
 
     this.saveToStorage();
@@ -378,7 +383,6 @@ class DormService {
   }
 
   public checkInGuest(guestData: Omit<Guest, 'id'>): { success: boolean; message: string; guest?: Guest } {
-    console.log(`[POST] /api/guests`, guestData);
     const roomIndex = this.rooms.findIndex(r => r.id === guestData.roomId);
     if (roomIndex === -1) return { success: false, message: "Phòng không tồn tại." };
     const room = this.rooms[roomIndex];
@@ -396,7 +400,6 @@ class DormService {
   }
 
   public updateGuest(id: string, data: Partial<Guest>) {
-      console.log(`[PUT] /api/guests/${id}`, data);
       const idx = this.guests.findIndex(g => g.id === id);
       if (idx === -1) return { success: false, message: "Khách không tồn tại" };
       
@@ -415,42 +418,19 @@ class DormService {
   }
 
   public checkOutGuest(id: string) {
-     console.log(`[DELETE] /api/guests/${id}`);
      const guest = this.guests.find(g => g.id === id);
      if (!guest) return { success: false, message: "Khách không tồn tại" };
 
      const roomId = guest.roomId;
+     
+     // Remove guest
      this.guests = this.guests.filter(g => g.id !== id);
      
+     // Update capacity of the room they left
      this.updateRoomCapacity(roomId);
      
      this.saveToStorage();
      return { success: true, message: "Đã trả phòng cho khách." };
-  }
-
-  // --- HELPER: Robust Capacity Logic ---
-  private updateRoomCapacity(roomId: string): void {
-      const idx = this.rooms.findIndex(r => r.id === roomId);
-      if (idx === -1) return;
-
-      const studentCount = this.students.filter(s => s.roomId === roomId).length;
-      const guestCount = this.guests.filter(g => g.roomId === roomId).length;
-      const newCapacity = studentCount + guestCount;
-      
-      let newStatus = this.rooms[idx].status;
-      if (this.rooms[idx].status !== RoomStatus.MAINTENANCE) {
-          if (newCapacity >= this.rooms[idx].maxCapacity) {
-              newStatus = RoomStatus.FULL;
-          } else {
-              newStatus = RoomStatus.AVAILABLE;
-          }
-      }
-
-      this.rooms[idx] = { 
-          ...this.rooms[idx], 
-          currentCapacity: newCapacity, 
-          status: newStatus 
-      };
   }
 
   // --- ASSETS ---
@@ -461,14 +441,12 @@ class DormService {
   }
 
   public addAsset(asset: Omit<Asset, 'id'>) {
-      console.log(`[POST] /api/assets`, asset);
       this.assets.push({ id: `a${Date.now()}`, ...asset });
       this.saveToStorage();
       return { success: true };
   }
 
   public updateAsset(id: string, data: Partial<Asset>) {
-      console.log(`[PUT] /api/assets/${id}`, data);
       const idx = this.assets.findIndex(a => a.id === id);
       if (idx === -1) return { success: false, message: "Tài sản không tồn tại" };
       
@@ -482,7 +460,6 @@ class DormService {
   }
 
   public deleteAsset(id: string) {
-      console.log(`[DELETE] /api/assets/${id}`);
       this.assets = this.assets.filter(a => a.id !== id);
       this.saveToStorage();
       return { success: true };
@@ -492,7 +469,6 @@ class DormService {
   public getBills() { return this.bills; }
 
   public createBill(data: Omit<Bill, 'id' | 'totalAmount' | 'createdAt' | 'status' | 'dueDate'>) {
-      console.log(`[POST] /api/bills`, data);
       const electricityCost = (data.electricIndexNew - data.electricIndexOld) * 3500; 
       const waterCost = (data.waterIndexNew - data.waterIndexOld) * 10000; 
       const total = electricityCost + waterCost + data.roomFee;
@@ -515,7 +491,6 @@ class DormService {
   }
 
   public updateBill(id: string, data: Partial<Bill>) {
-      console.log(`[PUT] /api/bills/${id}`, data);
       const idx = this.bills.findIndex(b => b.id === id);
       if (idx === -1) return { success: false, message: "Hóa đơn không tồn tại" };
 
@@ -532,21 +507,15 @@ class DormService {
   }
 
   public deleteBill(id: string) {
-      console.log(`[DELETE] /api/bills/${id}`);
       this.bills = this.bills.filter(b => b.id !== id);
       this.saveToStorage();
       return { success: true };
   }
 
   public payBill(id: string) {
-      console.log(`[POST] /api/bills/${id}/pay`);
       const idx = this.bills.findIndex(b => b.id === id);
       if(idx > -1) {
-          // Update status
           this.bills[idx].status = 'PAID';
-          // Optional: You could add a 'paidAt' field to the Bill type if you want strict tracking
-          // this.bills[idx].paidAt = new Date().toISOString(); 
-          
           this.saveToStorage();
           return { success: true, message: "Xác nhận thanh toán thành công." };
       }

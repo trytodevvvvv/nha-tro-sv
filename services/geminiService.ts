@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { DashboardStats } from "../types";
 
@@ -5,7 +6,7 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
   const apiKey = process.env.API_KEY;
   
   if (!apiKey) {
-    return "Gemini API Key is missing. Please define process.env.API_KEY.";
+    return "Thiếu API Key. Vui lòng cấu hình process.env.API_KEY.";
   }
 
   try {
@@ -13,11 +14,13 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
     const model = "gemini-2.5-flash";
 
     const prompt = `
-      You are an AI assistant for a Dormitory Management System.
-      Analyze the following dashboard statistics and provide a brief, professional executive summary 
-      (2-3 sentences) and 3 actionable recommendations to improve occupancy or revenue.
+      Bạn là trợ lý AI thông minh cho Hệ thống Quản lý Nhà trọ / Ký túc xá.
+      Hãy phân tích các số liệu thống kê dưới đây và cung cấp một bản tóm tắt điều hành ngắn gọn, chuyên nghiệp (2-3 câu)
+      cùng với 3 đề xuất hành động cụ thể để cải thiện tỷ lệ lấp đầy hoặc tăng doanh thu.
       
-      Stats:
+      **YÊU CẦU QUAN TRỌNG: TRẢ LỜI HOÀN TOÀN BẰNG TIẾNG VIỆT.**
+      
+      Số liệu thống kê:
       ${JSON.stringify(stats, null, 2)}
     `;
 
@@ -26,9 +29,9 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
       contents: prompt,
     });
 
-    return response.text || "Could not generate report.";
+    return response.text || "Không thể tạo báo cáo.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Error connecting to Gemini AI service.";
+    return "Lỗi kết nối đến dịch vụ AI.";
   }
 };

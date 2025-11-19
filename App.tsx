@@ -126,9 +126,9 @@ const App: React.FC = () => {
 
         {/* Top Bar (Desktop) */}
         <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 h-16 px-6 flex items-center justify-between sticky top-0 z-20 hidden md:flex transition-colors duration-200">
-          <div className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-             Năm học 2023-2024
-          </div>
+          {/* Removed School Year Text */}
+          <div></div> 
+
           <div className="flex items-center gap-4">
             
             {/* Theme Toggle */}
