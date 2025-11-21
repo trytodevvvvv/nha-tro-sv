@@ -12,16 +12,24 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
     
-    const user = dormService.login(username, password);
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('Tên đăng nhập hoặc mật khẩu không đúng.');
+    try {
+      const user = await dormService.login(username, password);
+      if (user) {
+        onLogin(user);
+      } else {
+        setError('Tên đăng nhập hoặc mật khẩu không đúng.');
+      }
+    } catch (err) {
+      setError('Lỗi kết nối Server.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -76,16 +84,13 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             <button 
               type="submit"
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl"
+              disabled={isLoading}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 dark:hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-200 dark:shadow-none hover:shadow-xl disabled:opacity-70"
             >
-              Đăng nhập
+              {isLoading ? 'Đang kết nối...' : 'Đăng nhập'}
             </button>
-
-            <div className="text-center mt-6">
-               <p className="text-xs text-gray-400">
-                 Tài khoản mặc định: <span className="font-mono text-gray-600 dark:text-gray-300">admin / 123</span> hoặc <span className="font-mono text-gray-600 dark:text-gray-300">staff / 123</span>
-               </p>
-            </div>
+            
+            {/* REMOVE DEMO CREDENTIALS HINT IN PRODUCTION */}
           </form>
         </div>
       </div>

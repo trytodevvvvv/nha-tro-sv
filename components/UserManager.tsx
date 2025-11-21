@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Role } from '../types';
 import { dormService } from '../services/dormService';
 import { Plus, User as UserIcon, Trash2, Shield, Edit, X, Key } from 'lucide-react';
@@ -9,7 +8,7 @@ interface UserManagerProps {
 }
 
 const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
-  const [users, setUsers] = useState<User[]>(dormService.getUsers());
+  const [users, setUsers] = useState<User[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
@@ -19,6 +18,19 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
       fullName: '',
       role: Role.STAFF
   });
+
+  const fetchData = async () => {
+      try {
+        const u = await dormService.getUsers();
+        setUsers(u);
+      } catch (error) {
+          console.error("Failed to fetch users", error);
+      }
+  };
+
+  useEffect(() => {
+      fetchData();
+  }, []);
 
   if (currentUser.role !== Role.ADMIN) {
       return <div className="p-8 text-center text-red-500">Bạn không có quyền truy cập trang này.</div>;
@@ -43,7 +55,7 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
       setShowModal(true);
   };
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (id === currentUser.id) {
@@ -51,25 +63,25 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
           return;
       }
       if (window.confirm("Bạn có chắc muốn xóa tài khoản này?")) {
-          dormService.deleteUser(id);
-          setUsers([...dormService.getUsers()]);
+          await dormService.deleteUser(id);
+          fetchData();
       }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       let res;
       if (editingId) {
-          res = dormService.updateUser(editingId, formData);
+          res = await dormService.updateUser(editingId, formData);
       } else {
-          res = dormService.addUser(formData);
+          res = await dormService.addUser(formData);
       }
 
-      if (res.success) {
-          setUsers([...dormService.getUsers()]);
+      if (res.success !== false) {
+          fetchData();
           setShowModal(false);
       } else {
-          alert(res.message);
+          alert(res.message || "Lỗi không xác định");
       }
   };
 

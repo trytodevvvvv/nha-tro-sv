@@ -72,7 +72,8 @@ export interface Bill {
   totalAmount: number;
   status: 'PAID' | 'UNPAID';
   createdAt: string;
-  dueDate: string; // New field: Hạn thanh toán
+  dueDate: string; // Hạn thanh toán
+  paymentDate?: string; // Ngày thực tế thanh toán
 }
 
 export interface Asset {

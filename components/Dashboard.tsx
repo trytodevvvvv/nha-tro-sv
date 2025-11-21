@@ -1,21 +1,52 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Bed, Users, Zap, Sparkles, TrendingUp, DollarSign, AlertTriangle, Wrench, Calendar } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import StatCard from './StatCard';
 import { generateDashboardReport } from '../services/geminiService';
+import { DashboardStats, MonthlyRevenue, Room, Bill } from '../types';
 
 const Dashboard: React.FC = () => {
-  const stats = dormService.getDashboardStats();
-  const revenueData = dormService.getRevenueData();
-  const rooms = dormService.getRooms();
-  const bills = dormService.getBills();
-  
+  // Initialize with potentially cached data if available (Sync feel)
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [revenueData, setRevenueData] = useState<MonthlyRevenue[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchData = async () => {
+        try {
+            // Fetch in parallel
+            const [s, r, rm, b] = await Promise.all([
+                dormService.getDashboardStats(),
+                dormService.getRevenueData(),
+                dormService.getRooms(),
+                dormService.getBills()
+            ]);
+            if(mounted) {
+                setStats(s);
+                setRevenueData(r);
+                setRooms(rm);
+                setBills(b);
+                setLoading(false);
+            }
+        } catch (e) {
+            console.error("Dashboard fetch error", e);
+            if(mounted) setLoading(false);
+        }
+    };
+    fetchData();
+    return () => { mounted = false; };
+  }, []);
+
   const [aiReport, setAiReport] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState(false);
 
   const handleGenerateReport = async () => {
+    if (!stats) return;
     setLoadingAi(true);
     setAiReport(null);
     const report = await generateDashboardReport(stats);
@@ -23,26 +54,34 @@ const Dashboard: React.FC = () => {
     setLoadingAi(false);
   };
 
+  // Loading state only shown if NO data exists. If cached data exists, show it.
+  if (loading && !stats) return <div className="p-10 text-center text-gray-500">Đang tải dữ liệu thống kê...</div>;
+  if (!stats) return null;
+
   // Quick Insights Data
   const maintenanceRooms = rooms.filter(r => r.status === 'MAINTENANCE').length;
   const unpaidBillsCount = bills.filter(b => b.status === 'UNPAID').length;
   const totalRevenue = bills.reduce((acc, curr) => acc + (curr.status === 'PAID' ? curr.totalAmount : 0), 0);
 
-  // Custom Tooltip for Chart
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
+      const total = payload.reduce((sum: number, entry: any) => sum + (entry.value || 0), 0);
       return (
         <div className="bg-white dark:bg-gray-800 p-4 border border-gray-100 dark:border-gray-700 rounded-xl shadow-xl">
-          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">{label}</p>
+          <p className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Tháng {label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center gap-2 text-xs mb-1">
               <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.fill }}></div>
-              <span className="text-gray-500 dark:text-gray-400">{entry.name}:</span>
-              <span className="font-medium text-gray-900 dark:text-white">
+              <span className="text-gray-500 dark:text-gray-400 w-20">{entry.name}:</span>
+              <span className="font-medium text-gray-900 dark:text-white flex-1 text-right">
                 {entry.value.toLocaleString()} đ
               </span>
             </div>
           ))}
+          <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center">
+              <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Tổng doanh thu:</span>
+              <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">{total.toLocaleString()} đ</span>
+          </div>
         </div>
       );
     }
@@ -51,7 +90,6 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in pb-10">
-      
       {/* 1. HERO SECTION */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-xl p-8 md:p-10">
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -85,7 +123,7 @@ const Dashboard: React.FC = () => {
         <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-40 h-40 bg-indigo-400 opacity-20 rounded-full blur-2xl"></div>
       </div>
 
-      {/* 2. AI REPORT (Collapsible/Conditional) */}
+      {/* 2. AI REPORT */}
       {aiReport && (
         <div className="bg-gradient-to-br from-white to-indigo-50 dark:from-gray-800 dark:to-gray-800/50 border border-indigo-100 dark:border-gray-700 p-6 rounded-2xl shadow-sm relative overflow-hidden animate-fade-in-up">
           <div className="flex items-start gap-4">
@@ -136,26 +174,14 @@ const Dashboard: React.FC = () => {
         />
       </div>
 
-      {/* 4. MAIN CONTENT SPLIT */}
+      {/* 4. CHARTS & INSIGHTS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
         {/* Left: Revenue Chart */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] dark:shadow-none border border-gray-100 dark:border-gray-700">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex justify-between items-center mb-8">
              <div>
                 <h3 className="text-xl font-bold text-gray-800 dark:text-white">Biểu đồ Doanh thu</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Theo dõi dòng tiền hàng tháng</p>
-             </div>
-             <div className="flex gap-3 text-xs font-medium bg-gray-50 dark:bg-gray-700/50 p-1.5 rounded-lg">
-                <div className="px-3 py-1.5 bg-white dark:bg-gray-600 rounded-md shadow-sm text-indigo-600 dark:text-indigo-300 flex items-center gap-2">
-                   <div className="w-2 h-2 rounded-full bg-indigo-500"></div> Tiền phòng
-                </div>
-                <div className="px-3 py-1.5 flex items-center gap-2 text-gray-500 dark:text-gray-300">
-                   <div className="w-2 h-2 rounded-full bg-amber-500"></div> Điện
-                </div>
-                <div className="px-3 py-1.5 flex items-center gap-2 text-gray-500 dark:text-gray-300">
-                   <div className="w-2 h-2 rounded-full bg-sky-500"></div> Nước
-                </div>
              </div>
           </div>
           
@@ -164,19 +190,8 @@ const Dashboard: React.FC = () => {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={revenueData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" className="dark:opacity-10" />
-                  <XAxis 
-                    dataKey="month" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fill: '#6B7280', fontSize: 12}} 
-                    dy={10} 
-                  />
-                  <YAxis 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{fill: '#6B7280', fontSize: 12}} 
-                    tickFormatter={(value) => `${(value/1000000).toFixed(0)}M`} 
-                  />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 12}} tickFormatter={(value) => `${(value/1000000).toFixed(0)}M`} />
                   <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(99, 102, 241, 0.05)'}} />
                   <Bar dataKey="roomFee" name="Tiền phòng" stackId="a" fill="#6366F1" radius={[0, 0, 4, 4]} barSize={32} />
                   <Bar dataKey="electricity" name="Tiền điện" stackId="a" fill="#F59E0B" radius={[0, 0, 0, 0]} barSize={32} />
@@ -192,29 +207,21 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: Quick Insights & Occupancy */}
+        {/* Right: Occupancy & Alerts */}
         <div className="space-y-6">
-          
           {/* Occupancy Donut */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] dark:shadow-none border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center relative overflow-hidden">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center text-center relative overflow-hidden">
              <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-6 w-full text-left">Tình trạng phòng</h3>
-             
              <div className="relative w-52 h-52 mb-6">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                   <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#F3F4F6" strokeWidth="2.5" className="dark:stroke-gray-700" />
-                  <path 
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" 
-                    fill="none" stroke="#6366F1" strokeWidth="2.5" 
-                    strokeDasharray={`${stats.occupancyRate}, 100`} strokeLinecap="round" 
-                    className="drop-shadow-[0_0_4px_rgba(99,102,241,0.4)]"
-                  />
+                  <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#6366F1" strokeWidth="2.5" strokeDasharray={`${stats.occupancyRate}, 100`} strokeLinecap="round" className="drop-shadow-[0_0_4px_rgba(99,102,241,0.4)]" />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                    <span className="text-4xl font-black text-gray-900 dark:text-white">{stats.occupancyRate}%</span>
                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mt-1">Lấp đầy</span>
                 </div>
              </div>
-
              <div className="grid grid-cols-2 gap-3 w-full">
                 <div className="bg-gray-50 dark:bg-gray-700/30 p-3 rounded-xl text-left">
                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Còn trống</p>
@@ -228,7 +235,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Quick Alerts */}
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-[0_2px_10px_-3px_rgba(0,0,0,0.05)] dark:shadow-none border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-3xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4">Cần chú ý</h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30">
@@ -241,9 +248,7 @@ const Dashboard: React.FC = () => {
                     <p className="text-xs text-red-500">Chưa thanh toán</p>
                   </div>
                 </div>
-                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
               </div>
-
               <div className="flex items-center justify-between p-3 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-100 dark:border-amber-900/30">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white dark:bg-amber-900/30 rounded-lg text-amber-500">

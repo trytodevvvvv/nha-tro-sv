@@ -1,8 +1,7 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Search, Trash2, User, Calendar, CreditCard, X, Edit } from 'lucide-react';
 import { dormService } from '../services/dormService';
-import { Guest, Role } from '../types';
+import { Guest, Role, Room } from '../types';
 
 interface GuestManagerProps {
   onUpdate: () => void;
@@ -10,7 +9,8 @@ interface GuestManagerProps {
 }
 
 const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
-  const [guests, setGuests] = useState<Guest[]>(dormService.getGuests());
+  const [guests, setGuests] = useState<Guest[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -25,7 +25,19 @@ const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
     checkOutDate: ''
   });
 
-  const rooms = dormService.getRooms();
+  const fetchData = async () => {
+      try {
+          const [g, r] = await Promise.all([dormService.getGuests(), dormService.getRooms()]);
+          setGuests(g);
+          setRooms(r);
+      } catch (error) {
+          console.error("Failed to fetch guest data", error);
+      }
+  };
+
+  useEffect(() => {
+      fetchData();
+  }, [onUpdate]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({
@@ -49,12 +61,12 @@ const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
       setShowModal(true);
   };
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
      e.preventDefault();
      e.stopPropagation(); // Prevent event bubbling
      if(window.confirm("Xác nhận khách đã rời đi và xóa khỏi danh sách?")) {
-         dormService.checkOutGuest(id);
-         setGuests([...dormService.getGuests()]); // Force re-render
+         await dormService.checkOutGuest(id);
+         fetchData();
          onUpdate();
      }
   };
@@ -65,7 +77,7 @@ const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
       setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
 
@@ -77,9 +89,9 @@ const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
     try {
       let result;
       if (editingId) {
-          result = dormService.updateGuest(editingId, formData);
+          result = await dormService.updateGuest(editingId, formData);
       } else {
-          result = dormService.checkInGuest({
+          result = await dormService.checkInGuest({
             name: formData.name,
             cccd: formData.cccd,
             relation: formData.relation,
@@ -89,17 +101,17 @@ const GuestManager: React.FC<GuestManagerProps> = ({ onUpdate, role }) => {
           });
       }
 
-      if (result.success) {
-        setGuests([...dormService.getGuests()]);
+      if (result.success !== false) {
+        fetchData();
         setShowModal(false);
         setFormData({ name: '', cccd: '', relation: '', roomId: '', checkInDate: new Date().toISOString().split('T')[0], checkOutDate: '' });
         setEditingId(null);
         onUpdate(); 
       } else {
-        setErrorMsg(result.message);
+        setErrorMsg(result.message || "Có lỗi xảy ra");
       }
     } catch (err) {
-      setErrorMsg("Đã xảy ra lỗi.");
+      setErrorMsg("Đã xảy ra lỗi kết nối.");
     }
   };
 

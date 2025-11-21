@@ -1,18 +1,17 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, Monitor, AlertTriangle, CheckCircle, Wrench, Trash2, X, Edit } from 'lucide-react';
 import { dormService } from '../services/dormService';
-import { Asset, AssetStatus, Role } from '../types';
+import { Asset, AssetStatus, Role, Room } from '../types';
 
 interface AssetManagerProps {
     role: Role;
 }
 
 const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
-  const [assets, setAssets] = useState<Asset[]>(dormService.getAssets());
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const rooms = dormService.getRooms();
   
   const [formData, setFormData] = useState({
       name: '',
@@ -20,6 +19,20 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
       value: 0,
       status: AssetStatus.GOOD
   });
+
+  const fetchData = async () => {
+      try {
+        const [a, r] = await Promise.all([dormService.getAssets(), dormService.getRooms()]);
+        setAssets(a);
+        setRooms(r);
+      } catch (error) {
+          console.error("Failed to fetch assets data", error);
+      }
+  };
+
+  useEffect(() => {
+      fetchData();
+  }, []);
 
   const handleAddNew = () => {
       setEditingId(null);
@@ -40,29 +53,29 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
       setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (editingId) {
-          dormService.updateAsset(editingId, formData);
+          await dormService.updateAsset(editingId, formData);
       } else {
-          dormService.addAsset(formData);
+          await dormService.addAsset(formData);
       }
-      setAssets([...dormService.getAssets()]);
+      fetchData();
       setShowModal(false);
       setEditingId(null);
   };
 
-  const updateStatus = (id: string, status: AssetStatus) => {
-      dormService.updateAssetStatus(id, status);
-      setAssets([...dormService.getAssets()]); // Refresh
+  const updateStatus = async (id: string, status: AssetStatus) => {
+      await dormService.updateAssetStatus(id, status);
+      fetchData();
   };
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if(window.confirm("Xóa tài sản này khỏi hệ thống?")) {
-        dormService.deleteAsset(id);
-        setAssets([...dormService.getAssets()]);
+        await dormService.deleteAsset(id);
+        fetchData();
       }
   };
 

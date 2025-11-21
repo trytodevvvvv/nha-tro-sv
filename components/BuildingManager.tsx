@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Building2, Edit, Save, X } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Building, Role } from '../types';
@@ -8,30 +9,35 @@ interface BuildingManagerProps {
 }
 
 const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
-  const [buildings, setBuildings] = useState<Building[]>(dormService.getBuildings());
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [newBuildingName, setNewBuildingName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
+  const fetchData = async () => {
+      try {
+          const data = await dormService.getBuildings();
+          setBuildings(data);
+      } catch(e) { console.error(e); }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newBuildingName.trim()) return;
-    dormService.addBuilding(newBuildingName);
-    setBuildings(dormService.getBuildings());
+    await dormService.addBuilding({ name: newBuildingName }); // assuming backend accepts object
+    fetchData();
     setNewBuildingName('');
   };
 
-  const handleDelete = (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.preventDefault();
-      e.stopPropagation(); // Quan trọng: ngăn click lan tỏa
-      
-      if(window.confirm("Xóa tòa nhà này? Lưu ý: Chỉ xóa được tòa nhà không còn phòng.")) {
-          const res = dormService.deleteBuilding(id);
-          if(res.success) {
-              setBuildings(dormService.getBuildings());
-          } else {
-              alert(res.message);
-          }
+      e.stopPropagation();
+      if(window.confirm("Xóa tòa nhà này?")) {
+          const res = await dormService.deleteBuilding(id);
+          if(res.success !== false) fetchData();
+          else alert("Lỗi xóa tòa nhà (Có thể còn phòng)");
       }
   };
 
@@ -40,14 +46,10 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
       setEditName(b.name);
   };
 
-  const saveEdit = (id: string) => {
-      const res = dormService.updateBuilding(id, editName);
-      if(res.success) {
-          setBuildings(dormService.getBuildings());
-          setEditingId(null);
-      } else {
-          alert(res.message);
-      }
+  const saveEdit = async (id: string) => {
+      await dormService.updateBuilding(id, { name: editName });
+      fetchData();
+      setEditingId(null);
   };
 
   return (
@@ -77,7 +79,6 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
                       <div className="p-2 bg-gray-50 rounded-md border border-gray-200">
                           <Building2 size={20} className="text-gray-500" />
                       </div>
-                      
                       {editingId === b.id ? (
                           <input 
                               value={editName} 

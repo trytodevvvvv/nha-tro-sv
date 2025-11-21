@@ -1,10 +1,22 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { dormService } from '../services/dormService';
-import { RoomStatus } from '../types';
+import { RoomStatus, Room } from '../types';
 import { User, AlertCircle } from 'lucide-react';
 
 const RoomGrid: React.FC = () => {
-  const rooms = dormService.getRooms();
+  const [rooms, setRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    const fetchRooms = async () => {
+      try {
+        const data = await dormService.getRooms();
+        setRooms(data);
+      } catch (error) {
+        console.error("Failed to fetch rooms", error);
+      }
+    };
+    fetchRooms();
+  }, []);
 
   const getStatusColor = (status: RoomStatus) => {
     switch (status) {
