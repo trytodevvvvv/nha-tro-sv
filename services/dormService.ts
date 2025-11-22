@@ -81,6 +81,12 @@ class DormService {
 
         // 3. Xử lý lỗi nghiệp vụ từ Backend (vd: Phòng đầy)
         if (!res.ok) {
+            // Nếu lỗi 404 (Not Found), có thể do API chưa viết xong -> Chuyển sang Mock xử lý tạm
+            if (res.status === 404) {
+                console.warn(`Endpoint ${endpoint} not found on server. Trying fallback.`);
+                return this.handleMockFallback(endpoint, method, data);
+            }
+            
             return { 
                 success: false, 
                 message: result.message || result.error || `Lỗi Server: ${res.statusText}` 
@@ -98,12 +104,9 @@ class DormService {
   }
 
   // --- GETTERS (Optimized with Cache) ---
-  // Logic: Nếu có Cache -> Trả về ngay. Sau đó (nếu cần) mới fetch ngầm.
   
   public async getDashboardStats(): Promise<DashboardStats> {
     if (this.cache.stats) return this.cache.stats; 
-
-    // Nếu offline, tính toán mock ngay
     if (this.isOfflineMode) return this.calculateMockStats();
 
     try {
@@ -176,7 +179,6 @@ class DormService {
   }
   
   // --- GENERIC FETCHERS ---
-  // Pattern: Check Cache -> Return Cache. Else -> Call API. Catch -> Offline Mode -> Return Mock.
   
   private async genericGet<T>(key: keyof typeof this.cache, endpoint: string, mockData: T): Promise<T> {
       if (this.cache[key]) return this.cache[key] as T;
@@ -233,6 +235,7 @@ class DormService {
   public async updateBill(id: string, data: any) { this.invalidateCache(['bills', 'revenue']); return this.apiCall(`/bills/${id}`, 'PUT', data); }
   public async deleteBill(id: string) { this.invalidateCache(['bills', 'revenue']); return this.apiCall(`/bills/${id}`, 'DELETE'); }
   public async payBill(id: string) { this.invalidateCache(['bills', 'revenue', 'stats']); return this.apiCall(`/bills/${id}/pay`, 'POST'); }
+  public async unpayBill(id: string) { this.invalidateCache(['bills', 'revenue', 'stats']); return this.apiCall(`/bills/${id}/unpay`, 'POST'); }
 
   public async addUser(data: any) { this.invalidateCache(['users']); return this.apiCall('/users', 'POST', data); }
   public async updateUser(id: string, data: any) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'PUT', data); }
@@ -240,6 +243,50 @@ class DormService {
 
   // --- MOCK FALLBACK IMPLEMENTATION ---
   private handleMockFallback(endpoint: string, method: string, data: any): { success: boolean, message?: string, data?: any } {
+      
+      // --- BILLS PAYMENT HANDLING (Robust Regex) ---
+      // Match /bills/:id/pay
+      const payMatch = endpoint.match(/\/bills\/(.+)\/pay/);
+      if (payMatch && method === 'POST') {
+          const id = payMatch[1];
+          
+          // 1. Update in Mock Store
+          const bill = MOCK_BILLS.find(b => b.id === id);
+          if (bill) {
+              bill.status = 'PAID';
+              bill.paymentDate = new Date().toISOString();
+          }
+
+          // 2. Update in Cache (Visual) immediately
+          const cachedBill = this.cache.bills?.find(b => b.id === id);
+          if (cachedBill) {
+              cachedBill.status = 'PAID';
+              cachedBill.paymentDate = new Date().toISOString();
+          }
+
+          return { success: true };
+      }
+
+      // Match /bills/:id/unpay
+      const unpayMatch = endpoint.match(/\/bills\/(.+)\/unpay/);
+      if (unpayMatch && method === 'POST') {
+          const id = unpayMatch[1];
+          
+          const bill = MOCK_BILLS.find(b => b.id === id);
+          if (bill) {
+              bill.status = 'UNPAID';
+              bill.paymentDate = undefined;
+          }
+
+          const cachedBill = this.cache.bills?.find(b => b.id === id);
+          if (cachedBill) {
+              cachedBill.status = 'UNPAID';
+              cachedBill.paymentDate = undefined;
+          }
+          
+          return { success: true };
+      }
+
       // Students
       if (endpoint.startsWith('/students')) {
           if (method === 'POST') {
@@ -309,10 +356,9 @@ class DormService {
           }
       }
 
-      // Bills
+      // Bills (Create/Update/Delete)
       if (endpoint.startsWith('/bills')) {
           if (method === 'POST') {
-              // Logic tính toán Total Amount
               const elec = Math.max(0, (data.electricIndexNew - data.electricIndexOld) * 3500);
               const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
               const total = elec + water + Number(data.roomFee);
@@ -321,7 +367,7 @@ class DormService {
                   id: `bill${Date.now()}`, 
                   status: 'UNPAID', 
                   createdAt: new Date().toISOString(), 
-                  dueDate: new Date(Date.now() + 5*86400000).toISOString(), // 5 days later
+                  dueDate: new Date(Date.now() + 5*86400000).toISOString(), 
                   totalAmount: total,
                   ...data 
               };
@@ -341,17 +387,7 @@ class DormService {
                   const elec = Math.max(0, (data.electricIndexNew - data.electricIndexOld) * 3500);
                   const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
                   const total = elec + water + Number(data.roomFee);
-
                   MOCK_BILLS[idx] = { ...MOCK_BILLS[idx], ...data, totalAmount: total };
-              }
-              return { success: true };
-          }
-          if (endpoint.endsWith('/pay')) {
-              const id = endpoint.split('/')[2];
-              const bill = MOCK_BILLS.find(b => b.id === id);
-              if (bill) {
-                  bill.status = 'PAID';
-                  bill.paymentDate = new Date().toISOString();
               }
               return { success: true };
           }
@@ -379,7 +415,6 @@ class DormService {
           if (method === 'POST') { MOCK_BUILDINGS.push({ id: `b${Date.now()}`, ...data }); return { success: true }; }
           if (method === 'DELETE') {
              const id = endpoint.split('/').pop();
-             // Check if building has rooms
              const hasRooms = MOCK_ROOMS.some(r => r.buildingId === id);
              if (hasRooms) return { success: false, message: "Không thể xóa tòa nhà đang có phòng (Mock)" };
 
@@ -417,17 +452,35 @@ class DormService {
 
       // Users
       if (endpoint.startsWith('/users')) {
-        if (method === 'POST') { MOCK_USERS.push({ id: `u${Date.now()}`, ...data }); return { success: true }; }
+        if (method === 'POST') { 
+            const newUser = { id: `u${Date.now()}`, ...data };
+            MOCK_USERS.push(newUser); 
+            // Sync Cache
+            if (this.cache.users) this.cache.users.push(newUser);
+            return { success: true, data: newUser }; 
+        }
         if (method === 'DELETE') {
             const id = endpoint.split('/').pop();
             const idx = MOCK_USERS.findIndex(u => u.id === id);
-            if(idx > -1) MOCK_USERS.splice(idx, 1);
+            if(idx > -1) {
+                MOCK_USERS.splice(idx, 1);
+                // Sync Cache
+                if (this.cache.users) {
+                    this.cache.users = this.cache.users.filter(u => u.id !== id);
+                }
+            }
             return { success: true };
         }
         if (method === 'PUT') {
             const id = endpoint.split('/').pop();
             const idx = MOCK_USERS.findIndex(u => u.id === id);
-            if(idx > -1) MOCK_USERS[idx] = { ...MOCK_USERS[idx], ...data };
+            if(idx > -1) {
+                MOCK_USERS[idx] = { ...MOCK_USERS[idx], ...data };
+                // Sync Cache
+                if (this.cache.users) {
+                    this.cache.users = this.cache.users.map(u => u.id === id ? MOCK_USERS[idx] : u);
+                }
+            }
             return { success: true };
         }
       }

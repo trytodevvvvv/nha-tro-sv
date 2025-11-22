@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit, X, Calendar, CheckCircle, AlertTriangle, DollarSign, Droplets, Zap, Home, Filter } from 'lucide-react';
+import { Plus, Trash2, Edit, X, Calendar, CheckCircle, AlertTriangle, DollarSign, Droplets, Zap, Home, Filter, RefreshCcw, Lock } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Bill, Role, Room } from '../types';
 
@@ -73,6 +73,10 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
   const handleEdit = (bill: Bill, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      if (bill.status === 'PAID') {
+          alert("Hóa đơn đã thanh toán không thể chỉnh sửa. Vui lòng hủy thanh toán trước nếu cần thay đổi.");
+          return;
+      }
       setEditingId(bill.id);
       setFormData({
           roomId: bill.roomId,
@@ -128,9 +132,48 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
   const handlePay = async (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
       e.preventDefault();
-      if(window.confirm("Xác nhận hóa đơn này đã được khách thanh toán?")) {
-        await dormService.payBill(id);
-        fetchData();
+      if(window.confirm("Xác nhận đã thu tiền đầy đủ cho hóa đơn này?")) {
+        const res = await dormService.payBill(id);
+        if (res.success) {
+            // OPTIMISTIC UPDATE: Cập nhật giao diện ngay lập tức
+            setBills(prevBills => prevBills.map(b => {
+                if (b.id === id) {
+                    return { 
+                        ...b, 
+                        status: 'PAID', 
+                        paymentDate: new Date().toISOString() 
+                    };
+                }
+                return b;
+            }));
+            // Gọi fetch chạy ngầm để đồng bộ
+            fetchData(); 
+        } else {
+            alert("Lỗi thanh toán: " + (res.message || "Không xác định"));
+        }
+      }
+  };
+
+  const handleUnpay = async (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if(window.confirm("Hủy trạng thái 'Đã thanh toán'? Hóa đơn sẽ trở về trạng thái 'Chưa thu'.")) {
+        const res = await dormService.unpayBill(id);
+        if (res.success) {
+            // OPTIMISTIC UPDATE: Cập nhật giao diện ngay lập tức
+            setBills(prevBills => prevBills.map(b => {
+                if (b.id === id) {
+                    return { 
+                        ...b, 
+                        status: 'UNPAID', 
+                        paymentDate: undefined 
+                    };
+                }
+                return b;
+            }));
+            // Gọi fetch chạy ngầm để đồng bộ
+            fetchData();
+        }
       }
   };
 
@@ -139,6 +182,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
       e.stopPropagation();
       if(window.confirm("Bạn có chắc muốn xóa hóa đơn này không?")) {
           await dormService.deleteBill(id);
+          setBills(prev => prev.filter(b => b.id !== id)); // Xóa ngay khỏi UI
           fetchData();
       }
   };
@@ -167,17 +211,19 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
       total: bills.length,
       paid: bills.filter(b => b.status === 'PAID').length,
       unpaid: bills.filter(b => b.status === 'UNPAID').length,
-      overdue: bills.filter(b => b.status === 'UNPAID' && isOverdue(b)).length
+      overdue: bills.filter(b => b.status === 'UNPAID' && isOverdue(b)).length,
+      revenueCollected: bills.filter(b => b.status === 'PAID').reduce((sum, b) => sum + b.totalAmount, 0),
+      revenuePending: bills.filter(b => b.status === 'UNPAID').reduce((sum, b) => sum + b.totalAmount, 0)
   };
 
   if (loading && bills.length === 0) return <div className="p-10 text-center">Đang tải dữ liệu hóa đơn...</div>;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in pb-12">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Hóa đơn & Điện nước</h2>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">Quản lý thu tiền và theo dõi công nợ.</p>
+            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Hóa đơn & Thu chi</h2>
+            <p className="text-gray-500 dark:text-gray-400 text-sm">Quản lý và theo dõi dòng tiền hàng tháng.</p>
         </div>
         {role === Role.ADMIN && (
             <button 
@@ -188,6 +234,28 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
             <span>Tạo Hóa Đơn</span>
             </button>
         )}
+      </div>
+
+      {/* Financial Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center justify-between">
+              <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Cần thu (Chưa thanh toán)</p>
+                  <h3 className="text-2xl font-black text-amber-600 dark:text-amber-500 mt-1">{stats.revenuePending.toLocaleString()} đ</h3>
+              </div>
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-amber-600 dark:text-amber-500">
+                  <AlertTriangle size={24} />
+              </div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center justify-between">
+              <div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Thực thu (Đã thanh toán)</p>
+                  <h3 className="text-2xl font-black text-green-600 dark:text-green-500 mt-1">{stats.revenueCollected.toLocaleString()} đ</h3>
+              </div>
+              <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-600 dark:text-green-500">
+                  <CheckCircle size={24} />
+              </div>
+          </div>
       </div>
 
       {/* Filters */}
@@ -270,14 +338,25 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
                             {/* Admin Actions */}
                             {role === Role.ADMIN && (
                                 <div className="flex gap-1">
-                                    <button 
-                                        type="button"
-                                        onClick={(e) => handleEdit(bill, e)} 
-                                        className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                                        title="Sửa"
-                                    >
-                                        <Edit size={16}/>
-                                    </button>
+                                    {isPaid ? (
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => handleUnpay(e, bill.id)} 
+                                            className="p-2 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
+                                            title="Hủy thanh toán (Undo)"
+                                        >
+                                            <RefreshCcw size={16}/>
+                                        </button>
+                                    ) : (
+                                        <button 
+                                            type="button"
+                                            onClick={(e) => handleEdit(bill, e)} 
+                                            className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                                            title="Sửa"
+                                        >
+                                            <Edit size={16}/>
+                                        </button>
+                                    )}
                                     <button 
                                         type="button"
                                         onClick={(e) => handleDelete(bill.id, e)} 
@@ -303,14 +382,14 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
                                 )}
                                 {isPaid && bill.paymentDate && (
                                     <span className="text-xs text-green-600 dark:text-green-500 font-medium">
-                                        {formatDate(bill.paymentDate)}
+                                        Thu: {formatDate(bill.paymentDate)}
                                     </span>
                                 )}
                             </div>
                         </div>
 
                         {/* Bill Details */}
-                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 space-y-3 text-sm border border-gray-100 dark:border-gray-700/50 relative z-10">
+                        <div className="bg-gray-50 dark:bg-gray-700/30 rounded-xl p-4 space-y-3 text-sm border border-gray-100 dark:border-gray-700/50 relative z-10 opacity-90">
                             <div className="flex justify-between items-center">
                                 <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
                                     <Zap size={14} className="text-yellow-500"/> 
@@ -341,19 +420,25 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
                         {/* Footer / Total & Action */}
                         <div className="mt-5 relative z-10">
                             <div className="flex justify-between items-end mb-4">
-                               <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-wider">Tổng thanh toán</span>
+                               <span className="text-gray-500 dark:text-gray-400 text-xs uppercase font-bold tracking-wider">Tổng cộng</span>
                                <span className={`text-2xl font-black ${isPaid ? 'text-green-600 dark:text-green-400' : 'text-indigo-700 dark:text-indigo-400'}`}>
                                   {bill.totalAmount.toLocaleString()} đ
                                </span>
                             </div>
                             
-                            {!isPaid && role === Role.ADMIN && (
-                                <button 
-                                  onClick={(e) => handlePay(e, bill.id)} 
-                                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95"
-                                >
-                                    <DollarSign size={16}/> Xác nhận đã thu tiền
-                                </button>
+                            {role === Role.ADMIN && (
+                                isPaid ? (
+                                    <div className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 text-sm font-bold rounded-xl flex items-center justify-center gap-2 cursor-not-allowed">
+                                        <Lock size={16}/> Đã khóa sổ
+                                    </div>
+                                ) : (
+                                    <button 
+                                    onClick={(e) => handlePay(e, bill.id)} 
+                                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95"
+                                    >
+                                        <DollarSign size={16}/> Xác nhận thu tiền
+                                    </button>
+                                )
                             )}
                         </div>
                     </div>
