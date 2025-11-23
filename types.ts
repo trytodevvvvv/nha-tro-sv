@@ -97,13 +97,3 @@ export interface Notification {
   message: string;
   timestamp: string;
 }
-
-export interface Guest {
-  id: string;
-  name: string;
-  cccd: string;
-  relation: string;
-  roomId: string;
-  checkInDate: string;
-  checkOutDate: string;
-}
