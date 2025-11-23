@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { dormService } from '../services/dormService';
-import { RoomStatus, Room, Role, Building, Student, Guest, Asset, AssetStatus } from '../types';
-import { User, Plus, X, Trash2, Save, Users, DollarSign, BedDouble, Monitor, Clock, ShieldCheck, AlertTriangle, Wrench, CheckCircle } from 'lucide-react';
+import { RoomStatus, Room, Role, Building, Student, Asset, AssetStatus } from '../types';
+import { Plus, X, Trash2, Save, Users, DollarSign, Monitor, ShieldCheck, AlertTriangle, Wrench, CheckCircle } from 'lucide-react';
 
 interface RoomManagerProps {
     onUpdate: () => void;
@@ -43,7 +43,6 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
   
   // Detail data states
   const [roomStudents, setRoomStudents] = useState<Student[]>([]);
-  const [roomGuests, setRoomGuests] = useState<Guest[]>([]);
   const [roomAssets, setRoomAssets] = useState<Asset[]>([]);
 
   const [newRoomData, setNewRoomData] = useState<Partial<Room>>({
@@ -97,14 +96,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
       setEditRoomData(room);
       setActiveDetailTab('residents');
       
-      const [allStudents, allGuests, allAssets] = await Promise.all([
+      const [allStudents, allAssets] = await Promise.all([
           dormService.getStudents(),
-          dormService.getGuests(),
           dormService.getAssets()
       ]);
       
       setRoomStudents(allStudents.filter(s => s.roomId === room.id));
-      setRoomGuests(allGuests.filter(g => g.roomId === room.id));
       setRoomAssets(allAssets.filter(a => a.roomId === room.id));
   };
 
@@ -333,6 +330,8 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                                                             <span>{s.university}</span>
                                                             <span>•</span>
                                                             <span>{s.phone}</span>
+                                                            <span>•</span>
+                                                            <span className="text-indigo-500 font-medium">{s.studentCode}</span>
                                                         </div>
                                                     </div>
                                                     <span className="text-xs bg-white dark:bg-gray-600 px-2 py-1 rounded border border-gray-200 dark:border-gray-500 text-gray-600 dark:text-gray-300">
@@ -342,34 +341,6 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                                             ))
                                         ) : (
                                             <p className="text-sm text-gray-400 italic p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 text-center">Chưa có sinh viên đăng ký.</p>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Guests Section */}
-                                <div>
-                                    <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 flex items-center gap-2 tracking-wider">
-                                        Khách lưu trú ({roomGuests.length})
-                                    </h3>
-                                    <div className="space-y-2">
-                                        {roomGuests.length > 0 ? (
-                                            roomGuests.map(g => (
-                                                <div key={g.id} className="flex items-center gap-4 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-900/30">
-                                                    <div className="w-10 h-10 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center text-amber-600 dark:text-amber-500 font-bold text-sm">KH</div>
-                                                    <div className="flex-1">
-                                                        <div className="font-medium text-sm text-gray-900 dark:text-white">{g.name}</div>
-                                                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                            Quan hệ: {g.relation}
-                                                        </div>
-                                                    </div>
-                                                    <div className="text-right text-xs text-gray-500 dark:text-gray-400">
-                                                        <div>Đến: {g.checkInDate}</div>
-                                                        <div>Đi: {g.checkOutDate}</div>
-                                                    </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <p className="text-sm text-gray-400 italic p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-dashed border-gray-200 dark:border-gray-700 text-center">Không có khách lưu trú.</p>
                                         )}
                                     </div>
                                 </div>

@@ -1,28 +1,26 @@
 
-import { Room, Guest, Student, DashboardStats, Building, Bill, Asset, User, Notification, MonthlyRevenue, RoomStatus, Role } from '../types';
-import { MOCK_ROOMS, MOCK_STUDENTS, MOCK_GUESTS, MOCK_BUILDINGS, MOCK_ASSETS, MOCK_BILLS, MOCK_USERS } from './mockData';
+import { Room, Student, DashboardStats, Building, Bill, Asset, User, Notification, MonthlyRevenue, RoomStatus, Role, Guest } from '../types';
+import { MOCK_ROOMS, MOCK_STUDENTS, MOCK_BUILDINGS, MOCK_ASSETS, MOCK_BILLS, MOCK_USERS, MOCK_GUESTS } from './mockData';
 
 const API_URL = 'http://localhost:4000/api';
 
 class DormService {
   // --- CIRCUIT BREAKER STATE ---
-  // Nếu true: Bỏ qua hoàn toàn việc fetch mạng, dùng ngay Mock data -> Tốc độ 0.1ms
   private isOfflineMode = false;
 
   // --- IN-MEMORY CACHE ---
   private cache: {
       rooms?: Room[];
       students?: Student[];
-      guests?: Guest[];
       buildings?: Building[];
       assets?: Asset[];
       bills?: Bill[];
       users?: User[];
+      guests?: Guest[];
       stats?: DashboardStats;
       revenue?: MonthlyRevenue[];
   } = {};
 
-  // Hàm xóa cache khi có thay đổi dữ liệu
   private invalidateCache(keys: (keyof typeof this.cache)[]) {
       keys.forEach(key => {
           this.cache[key] = undefined;
@@ -31,13 +29,11 @@ class DormService {
   
   // --- AUTH ---
   public async login(username: string, password: string): Promise<User | null> {
-    // Login luôn thử kết nối server trước, ngoại trừ đã xác định offline
     if (this.isOfflineMode) {
          return MOCK_USERS.find(u => u.username === username && u.password === password) || null;
     }
 
     try {
-      // Set timeout ngắn cho login (2s) để fail nhanh nếu server tắt
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
@@ -54,14 +50,13 @@ class DormService {
       return data;
     } catch (e) {
       console.warn("Backend unavailable, switching to Offline Mode immediately.");
-      this.isOfflineMode = true; // Bật Circuit Breaker
+      this.isOfflineMode = true; 
       return MOCK_USERS.find(u => u.username === username && u.password === password) || null;
     }
   }
 
-  // --- GENERIC API CALL HANDLER WITH CIRCUIT BREAKER ---
+  // --- GENERIC API CALL HANDLER ---
   private async apiCall(endpoint: string, method: string, data?: any) {
-      // 1. Nếu đã biết Backend chết, dùng Mock ngay lập tức (0 latency)
       if (this.isOfflineMode) {
           return this.handleMockFallback(endpoint, method, data);
       }
@@ -73,20 +68,14 @@ class DormService {
         };
         if (data) options.body = JSON.stringify(data);
         
-        // 2. Gọi Server
         const res = await fetch(`${API_URL}${endpoint}`, options);
-        
-        // Parse JSON response
         const result = await res.json().catch(() => ({}));
 
-        // 3. Xử lý lỗi nghiệp vụ từ Backend (vd: Phòng đầy)
         if (!res.ok) {
-            // Nếu lỗi 404 (Not Found), có thể do API chưa viết xong -> Chuyển sang Mock xử lý tạm
             if (res.status === 404) {
                 console.warn(`Endpoint ${endpoint} not found on server. Trying fallback.`);
                 return this.handleMockFallback(endpoint, method, data);
             }
-            
             return { 
                 success: false, 
                 message: result.message || result.error || `Lỗi Server: ${res.statusText}` 
@@ -96,7 +85,6 @@ class DormService {
         return { success: true, data: result.data || result };
 
       } catch (e) {
-        // 4. Phát hiện lỗi mạng -> Bật chế độ Offline vĩnh viễn cho session này
         console.warn(`Backend connection failed (${method} ${endpoint}). Switching to Offline Mode.`);
         this.isOfflineMode = true; 
         return this.handleMockFallback(endpoint, method, data);
@@ -133,7 +121,6 @@ class DormService {
       const stats = {
         totalRooms, occupiedRooms, fullRooms, availableRooms,
         totalStudents: MOCK_STUDENTS.length,
-        totalGuests: MOCK_GUESTS.length,
         occupancyRate
       };
       this.cache.stats = stats;
@@ -202,11 +189,11 @@ class DormService {
 
   public async getRooms(): Promise<Room[]> { return this.genericGet('rooms', '/rooms', MOCK_ROOMS); }
   public async getStudents(): Promise<Student[]> { return this.genericGet('students', '/students', MOCK_STUDENTS); }
-  public async getGuests(): Promise<Guest[]> { return this.genericGet('guests', '/guests', MOCK_GUESTS); }
   public async getBuildings(): Promise<Building[]> { return this.genericGet('buildings', '/buildings', MOCK_BUILDINGS); }
   public async getAssets(): Promise<Asset[]> { return this.genericGet('assets', '/assets', MOCK_ASSETS); }
   public async getBills(): Promise<Bill[]> { return this.genericGet('bills', '/bills', MOCK_BILLS); }
   public async getUsers(): Promise<User[]> { return this.genericGet('users', '/users', MOCK_USERS); }
+  public async getGuests(): Promise<Guest[]> { return this.genericGet('guests', '/guests', MOCK_GUESTS); }
 
   // --- MUTATIONS ---
   
@@ -216,7 +203,7 @@ class DormService {
 
   public async addRoom(data: any) { this.invalidateCache(['rooms', 'stats']); return this.apiCall('/rooms', 'POST', data); }
   public async updateRoom(id: string, data: any) { this.invalidateCache(['rooms', 'stats']); return this.apiCall(`/rooms/${id}`, 'PUT', data); }
-  public async deleteRoom(id: string) { this.invalidateCache(['rooms', 'assets', 'bills', 'students', 'guests', 'stats']); return this.apiCall(`/rooms/${id}`, 'DELETE'); }
+  public async deleteRoom(id: string) { this.invalidateCache(['rooms', 'assets', 'bills', 'students', 'stats']); return this.apiCall(`/rooms/${id}`, 'DELETE'); }
 
   public async addBuilding(data: any) { this.invalidateCache(['buildings']); return this.apiCall('/buildings', 'POST', data); }
   public async updateBuilding(id: string, data: any) { this.invalidateCache(['buildings']); return this.apiCall(`/buildings/${id}`, 'PUT', data); }
@@ -226,10 +213,6 @@ class DormService {
   public async updateAsset(id: string, data: any) { this.invalidateCache(['assets']); return this.apiCall(`/assets/${id}`, 'PUT', data); }
   public async deleteAsset(id: string) { this.invalidateCache(['assets']); return this.apiCall(`/assets/${id}`, 'DELETE'); }
   public async updateAssetStatus(id: string, status: string) { this.invalidateCache(['assets']); return this.apiCall(`/assets/${id}`, 'PUT', { status }); }
-
-  public async checkInGuest(data: any) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall('/guests', 'POST', data); }
-  public async updateGuest(id: string, data: any) { this.invalidateCache(['guests']); return this.apiCall(`/guests/${id}`, 'PUT', data); }
-  public async checkOutGuest(id: string) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall(`/guests/${id}`, 'DELETE'); }
 
   public async createBill(data: any) { this.invalidateCache(['bills', 'revenue']); return this.apiCall('/bills', 'POST', data); }
   public async updateBill(id: string, data: any) { this.invalidateCache(['bills', 'revenue']); return this.apiCall(`/bills/${id}`, 'PUT', data); }
@@ -241,23 +224,23 @@ class DormService {
   public async updateUser(id: string, data: any) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'PUT', data); }
   public async deleteUser(id: string) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'DELETE'); }
 
+  public async checkInGuest(data: any) { this.invalidateCache(['guests']); return this.apiCall('/guests', 'POST', data); }
+  public async updateGuest(id: string, data: any) { this.invalidateCache(['guests']); return this.apiCall(`/guests/${id}`, 'PUT', data); }
+  public async checkOutGuest(id: string) { this.invalidateCache(['guests']); return this.apiCall(`/guests/${id}`, 'DELETE'); }
+
   // --- MOCK FALLBACK IMPLEMENTATION ---
   private handleMockFallback(endpoint: string, method: string, data: any): { success: boolean, message?: string, data?: any } {
       
-      // --- BILLS PAYMENT HANDLING (Robust Regex) ---
-      // Match /bills/:id/pay
       const payMatch = endpoint.match(/\/bills\/(.+)\/pay/);
       if (payMatch && method === 'POST') {
           const id = payMatch[1];
           
-          // 1. Update in Mock Store
           const bill = MOCK_BILLS.find(b => b.id === id);
           if (bill) {
               bill.status = 'PAID';
               bill.paymentDate = new Date().toISOString();
           }
 
-          // 2. Update in Cache (Visual) immediately
           const cachedBill = this.cache.bills?.find(b => b.id === id);
           if (cachedBill) {
               cachedBill.status = 'PAID';
@@ -267,7 +250,6 @@ class DormService {
           return { success: true };
       }
 
-      // Match /bills/:id/unpay
       const unpayMatch = endpoint.match(/\/bills\/(.+)\/unpay/);
       if (unpayMatch && method === 'POST') {
           const id = unpayMatch[1];
@@ -287,7 +269,6 @@ class DormService {
           return { success: true };
       }
 
-      // Students
       if (endpoint.startsWith('/students')) {
           if (method === 'POST') {
               const room = MOCK_ROOMS.find(r => r.id === data.roomId);
@@ -322,41 +303,6 @@ class DormService {
           }
       }
 
-      // Guests
-      if (endpoint.startsWith('/guests')) {
-          if (method === 'POST') {
-              const room = MOCK_ROOMS.find(r => r.id === data.roomId);
-              if(room) {
-                  if (room.currentCapacity >= room.maxCapacity) return { success: false, message: "Phòng đã đầy (Mock)" };
-                  room.currentCapacity++;
-                  if(room.currentCapacity >= room.maxCapacity) room.status = RoomStatus.FULL;
-              }
-              MOCK_GUESTS.push({ id: `g${Date.now()}`, ...data });
-              return { success: true };
-          }
-          if (method === 'DELETE') {
-              const id = endpoint.split('/').pop();
-              const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-              if (idx > -1) {
-                 const guest = MOCK_GUESTS[idx];
-                 const room = MOCK_ROOMS.find(r => r.id === guest.roomId);
-                 if(room) {
-                     room.currentCapacity = Math.max(0, room.currentCapacity - 1);
-                     if (room.currentCapacity < room.maxCapacity) room.status = RoomStatus.AVAILABLE;
-                 }
-                 MOCK_GUESTS.splice(idx, 1);
-              }
-              return { success: true };
-          }
-          if (method === 'PUT') {
-              const id = endpoint.split('/').pop();
-              const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-              if (idx > -1) MOCK_GUESTS[idx] = { ...MOCK_GUESTS[idx], ...data };
-              return { success: true };
-          }
-      }
-
-      // Bills (Create/Update/Delete)
       if (endpoint.startsWith('/bills')) {
           if (method === 'POST') {
               const elec = Math.max(0, (data.electricIndexNew - data.electricIndexOld) * 3500);
@@ -393,7 +339,6 @@ class DormService {
           }
       }
 
-      // Assets
       if (endpoint.startsWith('/assets')) {
           if (method === 'POST') { MOCK_ASSETS.push({ id: `a${Date.now()}`, ...data }); return { success: true }; }
           if (method === 'DELETE') {
@@ -410,7 +355,6 @@ class DormService {
           }
       }
 
-      // Buildings
       if (endpoint.startsWith('/buildings')) {
           if (method === 'POST') { MOCK_BUILDINGS.push({ id: `b${Date.now()}`, ...data }); return { success: true }; }
           if (method === 'DELETE') {
@@ -430,7 +374,6 @@ class DormService {
           }
       }
 
-      // Rooms
       if (endpoint.startsWith('/rooms')) {
           if (method === 'POST') { MOCK_ROOMS.push({ id: `r${Date.now()}`, currentCapacity: 0, ...data }); return { success: true }; }
           if (method === 'DELETE') {
@@ -450,12 +393,10 @@ class DormService {
           }
       }
 
-      // Users
       if (endpoint.startsWith('/users')) {
         if (method === 'POST') { 
             const newUser = { id: `u${Date.now()}`, ...data };
             MOCK_USERS.push(newUser); 
-            // Sync Cache
             if (this.cache.users) this.cache.users.push(newUser);
             return { success: true, data: newUser }; 
         }
@@ -464,7 +405,6 @@ class DormService {
             const idx = MOCK_USERS.findIndex(u => u.id === id);
             if(idx > -1) {
                 MOCK_USERS.splice(idx, 1);
-                // Sync Cache
                 if (this.cache.users) {
                     this.cache.users = this.cache.users.filter(u => u.id !== id);
                 }
@@ -476,11 +416,26 @@ class DormService {
             const idx = MOCK_USERS.findIndex(u => u.id === id);
             if(idx > -1) {
                 MOCK_USERS[idx] = { ...MOCK_USERS[idx], ...data };
-                // Sync Cache
                 if (this.cache.users) {
                     this.cache.users = this.cache.users.map(u => u.id === id ? MOCK_USERS[idx] : u);
                 }
             }
+            return { success: true };
+        }
+      }
+
+      if (endpoint.startsWith('/guests')) {
+        if (method === 'POST') { MOCK_GUESTS.push({ id: `g${Date.now()}`, ...data }); return { success: true }; }
+        if (method === 'DELETE') {
+            const id = endpoint.split('/').pop();
+            const idx = MOCK_GUESTS.findIndex(g => g.id === id);
+            if (idx > -1) MOCK_GUESTS.splice(idx, 1);
+            return { success: true };
+        }
+        if (method === 'PUT') {
+            const id = endpoint.split('/').pop();
+            const idx = MOCK_GUESTS.findIndex(g => g.id === id);
+            if (idx > -1) MOCK_GUESTS[idx] = { ...MOCK_GUESTS[idx], ...data };
             return { success: true };
         }
       }

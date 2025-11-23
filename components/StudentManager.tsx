@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Trash2, User, MapPin, GraduationCap, X, Edit } from 'lucide-react';
+import { Plus, Search, Trash2, User, MapPin, GraduationCap, X, Edit, Hash } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Student, Role, Room } from '../types';
 
@@ -33,6 +33,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   
   const [formData, setFormData] = useState({
+    studentCode: '',
     name: '',
     dob: '',
     gender: 'Male',
@@ -60,6 +61,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
       e.stopPropagation();
       setEditingId(s.id);
       setFormData({
+          studentCode: s.studentCode || '',
           name: s.name,
           dob: s.dob,
           gender: s.gender,
@@ -72,7 +74,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
 
   const handleAddNew = () => {
       setEditingId(null);
-      setFormData({ name: '', dob: '', gender: 'Male', phone: '', roomId: '', university: '' });
+      setFormData({ studentCode: '', name: '', dob: '', gender: 'Male', phone: '', roomId: '', university: '' });
       setShowModal(true);
   };
 
@@ -82,6 +84,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
     
     if (editingId) {
         result = await dormService.updateStudent(editingId, {
+             studentCode: formData.studentCode,
              name: formData.name,
              dob: formData.dob,
              gender: formData.gender as 'Male'|'Female',
@@ -91,6 +94,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
         });
     } else {
         result = await dormService.addStudent({
+            studentCode: formData.studentCode,
             name: formData.name,
             dob: formData.dob,
             gender: formData.gender as 'Male'|'Female',
@@ -131,6 +135,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
         <table className="w-full text-left border-collapse">
             <thead>
                 <tr className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs uppercase tracking-wider">
+                    <th className="p-4">MSV</th>
                     <th className="p-4">Họ và tên</th>
                     <th className="p-4">Phòng</th>
                     <th className="p-4">Trường / ĐH</th>
@@ -141,6 +146,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
                 {students.map(s => (
                     <tr key={s.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                         <td className="p-4 font-mono text-indigo-600 dark:text-indigo-400 font-bold">{s.studentCode}</td>
                         <td className="p-4 font-medium flex items-center gap-3 text-gray-900 dark:text-white">
                             <div className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300">
                                 <User size={16} />
@@ -188,20 +194,27 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
               <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 dark:border-gray-700">
                   <div className="flex justify-between mb-4">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật thông tin' : 'Thêm Sinh viên mới'}</h3>
-                      <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600"/></button>
+                      <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"/></button>
                   </div>
                   <form onSubmit={handleSubmit} className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        <input required placeholder="Họ và tên" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
-                        <input required type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         <div className="relative">
+                            <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input required placeholder="Mã Sinh viên (MSV)" value={formData.studentCode} onChange={e => setFormData({...formData, studentCode: e.target.value})} className="pl-9 p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         </div>
+                         <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input required placeholder="Họ và tên" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="pl-9 p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
-                          <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <input required type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                         <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
                               <option value="Male">Nam</option>
                               <option value="Female">Nữ</option>
                           </select>
-                          <input required placeholder="Số điện thoại" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
                       </div>
+                      <input required placeholder="Số điện thoại" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
                       <input placeholder="Trường Đại học / Cao đẳng" value={formData.university} onChange={e => setFormData({...formData, university: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
                       
                       <select required value={formData.roomId} onChange={e => setFormData({...formData, roomId: e.target.value})} className="p-2.5 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">

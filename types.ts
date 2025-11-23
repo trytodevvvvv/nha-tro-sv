@@ -35,12 +35,13 @@ export interface Room {
   buildingId: string;
   status: RoomStatus;
   maxCapacity: number;
-  currentCapacity: number; // Computed: students + guests
+  currentCapacity: number; // Computed: students
   pricePerMonth: number;
 }
 
 export interface Student {
   id: string;
+  studentCode: string; // Mã sinh viên (MSV)
   name: string;
   dob: string;
   gender: 'Male' | 'Female';
@@ -52,9 +53,8 @@ export interface Student {
 export interface Guest {
   id: string;
   name: string;
-  cccd: string; // ID Card Number
-  relation: string; // Relation to student
-  relatedStudentId?: string; // Optional link to a specific student
+  cccd: string;
+  relation: string;
   roomId: string;
   checkInDate: string;
   checkOutDate: string;
@@ -90,7 +90,6 @@ export interface DashboardStats {
   fullRooms: number;
   availableRooms: number; // Totally empty
   totalStudents: number;
-  totalGuests: number;
   occupancyRate: number;
 }
 

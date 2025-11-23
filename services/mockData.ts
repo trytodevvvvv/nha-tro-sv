@@ -1,5 +1,5 @@
 
-import { Room, RoomStatus, Student, Guest, Building, Bill, Asset, AssetStatus, User, Role } from '../types';
+import { Room, RoomStatus, Student, Building, Bill, Asset, AssetStatus, User, Role, Guest } from '../types';
 
 export const MOCK_USERS: User[] = [
   { id: 'u1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: Role.ADMIN },
@@ -21,18 +21,16 @@ export const MOCK_ROOMS: Room[] = [
 ];
 
 export const MOCK_STUDENTS: Student[] = [
-  { id: 's1', name: 'Nguyễn Văn A', dob: '2003-01-01', gender: 'Male', phone: '0901234567', roomId: 'r1', university: 'Đại học CNTT' },
-  { id: 's2', name: 'Trần Văn B', dob: '2003-02-01', gender: 'Male', phone: '0901234568', roomId: 'r1', university: 'Đại học Luật' },
-  { id: 's3', name: 'Lê Văn C', dob: '2003-03-01', gender: 'Male', phone: '0901234569', roomId: 'r1', university: 'Đại học CNTT' },
-  { id: 's4', name: 'Phạm Văn D', dob: '2003-04-01', gender: 'Male', phone: '0901234560', roomId: 'r1', university: 'Đại học Kinh tế' },
-  { id: 's5', name: 'Hoàng Thị E', dob: '2003-05-01', gender: 'Female', phone: '0901234561', roomId: 'r2', university: 'Đại học Y Dược' },
-  { id: 's6', name: 'Vũ Thị F', dob: '2003-06-01', gender: 'Female', phone: '0901234562', roomId: 'r2', university: 'Đại học Y Dược' },
-  { id: 's7', name: 'Đặng Văn G', dob: '2003-07-01', gender: 'Male', phone: '0901234563', roomId: 'r4', university: 'Đại học CNTT' },
-  { id: 's8', name: 'Bùi Văn H', dob: '2003-08-01', gender: 'Male', phone: '0901234564', roomId: 'r4', university: 'Đại học CNTT' },
-  { id: 's9', name: 'Đỗ Văn I', dob: '2003-09-01', gender: 'Male', phone: '0901234565', roomId: 'r4', university: 'Đại học Xây dựng' },
+  { id: 's1', studentCode: 'SV001', name: 'Nguyễn Văn A', dob: '2003-01-01', gender: 'Male', phone: '0901234567', roomId: 'r1', university: 'Đại học CNTT' },
+  { id: 's2', studentCode: 'SV002', name: 'Trần Văn B', dob: '2003-02-01', gender: 'Male', phone: '0901234568', roomId: 'r1', university: 'Đại học Luật' },
+  { id: 's3', studentCode: 'SV003', name: 'Lê Văn C', dob: '2003-03-01', gender: 'Male', phone: '0901234569', roomId: 'r1', university: 'Đại học CNTT' },
+  { id: 's4', studentCode: 'SV004', name: 'Phạm Văn D', dob: '2003-04-01', gender: 'Male', phone: '0901234560', roomId: 'r1', university: 'Đại học Kinh tế' },
+  { id: 's5', studentCode: 'SV005', name: 'Hoàng Thị E', dob: '2003-05-01', gender: 'Female', phone: '0901234561', roomId: 'r2', university: 'Đại học Y Dược' },
+  { id: 's6', studentCode: 'SV006', name: 'Vũ Thị F', dob: '2003-06-01', gender: 'Female', phone: '0901234562', roomId: 'r2', university: 'Đại học Y Dược' },
+  { id: 's7', studentCode: 'SV007', name: 'Đặng Văn G', dob: '2003-07-01', gender: 'Male', phone: '0901234563', roomId: 'r4', university: 'Đại học CNTT' },
+  { id: 's8', studentCode: 'SV008', name: 'Bùi Văn H', dob: '2003-08-01', gender: 'Male', phone: '0901234564', roomId: 'r4', university: 'Đại học CNTT' },
+  { id: 's9', studentCode: 'SV009', name: 'Đỗ Văn I', dob: '2003-09-01', gender: 'Male', phone: '0901234565', roomId: 'r4', university: 'Đại học Xây dựng' },
 ];
-
-export const MOCK_GUESTS: Guest[] = [];
 
 export const MOCK_ASSETS: Asset[] = [
     { id: 'a1', name: 'Điều hòa Daikin', roomId: 'r1', status: AssetStatus.GOOD, value: 5000000 },
@@ -45,4 +43,8 @@ export const MOCK_ASSETS: Asset[] = [
 export const MOCK_BILLS: Bill[] = [
     { id: 'bill1', roomId: 'r1', month: '2023-10', electricIndexOld: 100, electricIndexNew: 150, waterIndexOld: 50, waterIndexNew: 60, roomFee: 2000000, totalAmount: 2275000, status: 'PAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
     { id: 'bill2', roomId: 'r2', month: '2023-10', electricIndexOld: 80, electricIndexNew: 100, waterIndexOld: 40, waterIndexNew: 45, roomFee: 2000000, totalAmount: 2120000, status: 'UNPAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
+];
+
+export const MOCK_GUESTS: Guest[] = [
+    { id: 'g1', name: 'Nguyễn Thị Khách', cccd: '0123456789', relation: 'Chị gái', roomId: 'r2', checkInDate: '2023-10-25', checkOutDate: '2023-10-27' },
 ];

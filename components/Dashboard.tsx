@@ -158,10 +158,10 @@ const Dashboard: React.FC = () => {
         />
         <StatCard 
           title="Cư dân hiện tại" 
-          value={stats.totalStudents + stats.totalGuests} 
+          value={stats.totalStudents} 
           icon={<Users size={24} />}
           colorClass="bg-purple-50 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-          trend={`${stats.totalGuests} Khách`}
+          trend="Sinh viên"
           trendUp={true}
         />
         <StatCard 
@@ -185,7 +185,7 @@ const Dashboard: React.FC = () => {
              </div>
           </div>
           
-          <div className="h-[350px] w-full">
+          <div style={{ width: '100%', height: 350 }}>
             {revenueData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={revenueData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>

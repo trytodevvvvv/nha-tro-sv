@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { LayoutDashboard, Users, BedDouble, UserPlus, LogOut, Building2, FileText, Monitor, Shield, X } from 'lucide-react';
+import { LayoutDashboard, Users, BedDouble, LogOut, Building2, FileText, Monitor, Shield, X } from 'lucide-react';
 import { Role } from '../types';
 
 interface SidebarProps {
@@ -18,7 +18,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, role, onLogo
     { id: 'buildings', label: 'Quản lý Tòa nhà', icon: <Building2 size={20} /> },
     { id: 'rooms', label: 'Quản lý Phòng', icon: <BedDouble size={20} /> },
     { id: 'students', label: 'Sinh viên', icon: <Users size={20} /> },
-    { id: 'guests', label: 'Khách lưu trú', icon: <UserPlus size={20} /> },
     { id: 'bills', label: 'Hóa đơn & Điện nước', icon: <FileText size={20} /> },
     { id: 'assets', label: 'Tài sản & Thiết bị', icon: <Monitor size={20} /> },
   ];

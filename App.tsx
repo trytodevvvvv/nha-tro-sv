@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
-import GuestManager from './components/GuestManager';
 import RoomManager from './components/RoomManager';
 import StudentManager from './components/StudentManager';
 import BuildingManager from './components/BuildingManager';
@@ -85,8 +84,6 @@ const App: React.FC = () => {
     switch (activeTab) {
       case 'dashboard':
         return <Dashboard key={dataVersion} />;
-      case 'guests':
-        return <GuestManager key={dataVersion} onUpdate={handleDataUpdate} role={currentUser.role} />;
       case 'rooms':
         return <RoomManager key={dataVersion} onUpdate={handleDataUpdate} role={currentUser.role} />;
       case 'students':
