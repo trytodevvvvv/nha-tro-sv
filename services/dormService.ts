@@ -1,6 +1,6 @@
 
-import { Room, Student, DashboardStats, Building, Bill, Asset, User, Notification, MonthlyRevenue, RoomStatus, Role, Guest } from '../types';
-import { MOCK_ROOMS, MOCK_STUDENTS, MOCK_BUILDINGS, MOCK_ASSETS, MOCK_BILLS, MOCK_USERS, MOCK_GUESTS } from './mockData';
+import { Room, Student, DashboardStats, Building, Bill, Asset, User, Notification, MonthlyRevenue, RoomStatus, Role } from '../types';
+import { MOCK_ROOMS, MOCK_STUDENTS, MOCK_BUILDINGS, MOCK_ASSETS, MOCK_BILLS, MOCK_USERS } from './mockData';
 
 const API_URL = 'http://localhost:4000/api';
 
@@ -16,7 +16,6 @@ class DormService {
       assets?: Asset[];
       bills?: Bill[];
       users?: User[];
-      guests?: Guest[];
       stats?: DashboardStats;
       revenue?: MonthlyRevenue[];
   } = {};
@@ -202,7 +201,6 @@ class DormService {
   public async getAssets(): Promise<Asset[]> { return this.genericGet('assets', '/assets', MOCK_ASSETS); }
   public async getBills(): Promise<Bill[]> { return this.genericGet('bills', '/bills', MOCK_BILLS); }
   public async getUsers(): Promise<User[]> { return this.genericGet('users', '/users', MOCK_USERS); }
-  public async getGuests(): Promise<Guest[]> { return this.genericGet('guests', '/guests', MOCK_GUESTS); }
 
   // --- MUTATIONS ---
   
@@ -232,10 +230,6 @@ class DormService {
   public async addUser(data: any) { this.invalidateCache(['users']); return this.apiCall('/users', 'POST', data); }
   public async updateUser(id: string, data: any) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'PUT', data); }
   public async deleteUser(id: string) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'DELETE'); }
-
-  public async checkInGuest(data: any) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall('/guests', 'POST', data); }
-  public async updateGuest(id: string, data: any) { this.invalidateCache(['guests', 'rooms']); return this.apiCall(`/guests/${id}`, 'PUT', data); }
-  public async checkOutGuest(id: string) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall(`/guests/${id}`, 'DELETE'); }
 
   // --- MOCK FALLBACK IMPLEMENTATION ---
   private handleMockFallback(endpoint: string, method: string, data: any): { success: boolean, message?: string, data?: any } {
@@ -397,21 +391,17 @@ class DormService {
              const hasStudents = MOCK_STUDENTS.some(s => s.roomId === id);
              if (hasStudents) return { success: false, message: "Phòng đang có sinh viên, không thể xóa (Mock)" };
 
-             // 2. Check if room has guests
-             const hasGuests = MOCK_GUESTS.some(g => g.roomId === id);
-             if (hasGuests) return { success: false, message: "Phòng đang có khách lưu trú, không thể xóa (Mock)" };
-
-             // 3. Cascade Delete: Assets
+             // 2. Cascade Delete: Assets
              for (let i = MOCK_ASSETS.length - 1; i >= 0; i--) {
                  if (MOCK_ASSETS[i].roomId === id) MOCK_ASSETS.splice(i, 1);
              }
 
-             // 4. Cascade Delete: Bills
+             // 3. Cascade Delete: Bills
              for (let i = MOCK_BILLS.length - 1; i >= 0; i--) {
                  if (MOCK_BILLS[i].roomId === id) MOCK_BILLS.splice(i, 1);
              }
 
-             // 5. Delete Room
+             // 4. Delete Room
              const idx = MOCK_ROOMS.findIndex(r => r.id === id);
              if(idx > -1) MOCK_ROOMS.splice(idx, 1);
              return { success: true };
@@ -449,51 +439,6 @@ class DormService {
                 MOCK_USERS[idx] = { ...MOCK_USERS[idx], ...data };
                 if (this.cache.users) {
                     this.cache.users = this.cache.users.map(u => u.id === id ? MOCK_USERS[idx] : u);
-                }
-            }
-            return { success: true };
-        }
-      }
-
-      if (endpoint.startsWith('/guests')) {
-        if (method === 'POST') {
-            const room = MOCK_ROOMS.find(r => r.id === data.roomId);
-            if (!room) return { success: false, message: "Phòng không tồn tại" };
-            if (room.currentCapacity >= room.maxCapacity) return { success: false, message: "Phòng đã đầy" };
-
-            const newGuest = { id: `g${Date.now()}`, ...data };
-            MOCK_GUESTS.push(newGuest);
-            if (this.cache.guests) this.cache.guests.push(newGuest);
-            
-            room.currentCapacity++;
-            if(room.currentCapacity >= room.maxCapacity) room.status = RoomStatus.FULL;
-
-            return { success: true, data: newGuest };
-        }
-        if (method === 'DELETE') {
-            const id = endpoint.split('/').pop();
-            const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-            if (idx > -1) {
-                const guest = MOCK_GUESTS[idx];
-                const room = MOCK_ROOMS.find(r => r.id === guest.roomId);
-                if (room) {
-                    room.currentCapacity = Math.max(0, room.currentCapacity - 1);
-                    if (room.currentCapacity < room.maxCapacity && room.status === RoomStatus.FULL) {
-                        room.status = RoomStatus.AVAILABLE;
-                    }
-                }
-                MOCK_GUESTS.splice(idx, 1);
-                if (this.cache.guests) this.cache.guests = this.cache.guests.filter(g => g.id !== id);
-            }
-            return { success: true };
-        }
-        if (method === 'PUT') {
-            const id = endpoint.split('/').pop();
-            const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-            if (idx > -1) {
-                MOCK_GUESTS[idx] = { ...MOCK_GUESTS[idx], ...data };
-                if (this.cache.guests) {
-                    this.cache.guests = this.cache.guests.map(g => g.id === id ? MOCK_GUESTS[idx] : g);
                 }
             }
             return { success: true };

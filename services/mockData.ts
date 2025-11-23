@@ -1,6 +1,5 @@
 
-
-import { Room, RoomStatus, Student, Building, Bill, Asset, AssetStatus, User, Role, Guest } from '../types';
+import { Room, RoomStatus, Student, Building, Bill, Asset, AssetStatus, User, Role } from '../types';
 
 export const MOCK_USERS: User[] = [
   { id: 'u1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: Role.ADMIN },
@@ -44,8 +43,4 @@ export const MOCK_ASSETS: Asset[] = [
 export const MOCK_BILLS: Bill[] = [
     { id: 'bill1', roomId: 'r1', month: '2023-10', electricIndexOld: 100, electricIndexNew: 150, waterIndexOld: 50, waterIndexNew: 60, roomFee: 2000000, totalAmount: 2275000, status: 'PAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
     { id: 'bill2', roomId: 'r2', month: '2023-10', electricIndexOld: 80, electricIndexNew: 100, waterIndexOld: 40, waterIndexNew: 45, roomFee: 2000000, totalAmount: 2120000, status: 'UNPAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
-];
-
-export const MOCK_GUESTS: Guest[] = [
-    { id: 'g1', name: 'Phạm Văn Khách', cccd: '001203000001', relation: 'Bố', roomId: 'r1', checkInDate: '2023-10-25', checkOutDate: '2023-10-26' }
 ];
