@@ -36,8 +36,12 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
       e.stopPropagation();
       if(window.confirm("Xóa tòa nhà này?")) {
           const res = await dormService.deleteBuilding(id);
-          if(res.success !== false) fetchData();
-          else alert("Lỗi xóa tòa nhà (Có thể còn phòng)");
+          if(res.success) {
+              setBuildings(prev => prev.filter(b => b.id !== id)); // Optimistic update
+              fetchData();
+          } else {
+              alert(res.message || "Không thể xóa tòa nhà này (Có thể còn phòng).");
+          }
       }
   };
 

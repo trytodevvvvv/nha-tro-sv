@@ -56,14 +56,20 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
+      let res;
       if (editingId) {
-          await dormService.updateAsset(editingId, formData);
+          res = await dormService.updateAsset(editingId, formData);
       } else {
-          await dormService.addAsset(formData);
+          res = await dormService.addAsset(formData);
       }
-      fetchData();
-      setShowModal(false);
-      setEditingId(null);
+
+      if (res && res.success !== false) {
+          fetchData();
+          setShowModal(false);
+          setEditingId(null);
+      } else {
+          alert(res?.message || "Thao tác thất bại");
+      }
   };
 
   const updateStatus = async (id: string, status: AssetStatus) => {
@@ -74,9 +80,20 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
+      
+      if (role !== Role.ADMIN) {
+          alert("Bạn không có quyền xóa tài sản.");
+          return;
+      }
+
       if(window.confirm("Xóa tài sản này khỏi hệ thống?")) {
-        await dormService.deleteAsset(id);
-        fetchData();
+        const res = await dormService.deleteAsset(id);
+        if (res.success) {
+            setAssets(prev => prev.filter(a => a.id !== id)); // Optimistic update
+            fetchData(); // Sync
+        } else {
+            alert(res.message || "Xóa thất bại");
+        }
       }
   };
 
@@ -163,6 +180,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
                                     type="button"
                                     onClick={(e) => handleDelete(asset.id, e)} 
                                     className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                                    title="Xóa tài sản"
                                 >
                                     <Trash2 size={16}/>
                                 </button>
