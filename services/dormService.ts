@@ -57,6 +57,7 @@ class DormService {
 
   // --- GENERIC API CALL HANDLER ---
   private async apiCall(endpoint: string, method: string, data?: any) {
+      // 1. Nếu đã ở chế độ Offline, gọi Fallback ngay
       if (this.isOfflineMode) {
           return this.handleMockFallback(endpoint, method, data);
       }
@@ -69,22 +70,30 @@ class DormService {
         if (data) options.body = JSON.stringify(data);
         
         const res = await fetch(`${API_URL}${endpoint}`, options);
+        
+        // 2. Parse JSON response (kể cả khi lỗi 400/500 server vẫn thường trả về json message)
         const result = await res.json().catch(() => ({}));
 
+        // 3. Xử lý lỗi HTTP
         if (!res.ok) {
+            // Nếu lỗi 404 Not Found, có thể do chưa code API, thử fallback
             if (res.status === 404) {
                 console.warn(`Endpoint ${endpoint} not found on server. Trying fallback.`);
                 return this.handleMockFallback(endpoint, method, data);
             }
+            
+            // Trả về thông báo lỗi CỤ THỂ từ Backend (vd: "Phòng đã đầy")
             return { 
                 success: false, 
-                message: result.message || result.error || `Lỗi Server: ${res.statusText}` 
+                message: result.message || result.error || `Lỗi Server (${res.status}): ${res.statusText}` 
             };
         }
         
+        // 4. Thành công
         return { success: true, data: result.data || result };
 
       } catch (e) {
+        // 5. Lỗi kết nối (Network Error / Connection Refused) -> Chuyển sang Offline Mode
         console.warn(`Backend connection failed (${method} ${endpoint}). Switching to Offline Mode.`);
         this.isOfflineMode = true; 
         return this.handleMockFallback(endpoint, method, data);
@@ -224,9 +233,9 @@ class DormService {
   public async updateUser(id: string, data: any) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'PUT', data); }
   public async deleteUser(id: string) { this.invalidateCache(['users']); return this.apiCall(`/users/${id}`, 'DELETE'); }
 
-  public async checkInGuest(data: any) { this.invalidateCache(['guests']); return this.apiCall('/guests', 'POST', data); }
-  public async updateGuest(id: string, data: any) { this.invalidateCache(['guests']); return this.apiCall(`/guests/${id}`, 'PUT', data); }
-  public async checkOutGuest(id: string) { this.invalidateCache(['guests']); return this.apiCall(`/guests/${id}`, 'DELETE'); }
+  public async checkInGuest(data: any) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall('/guests', 'POST', data); }
+  public async updateGuest(id: string, data: any) { this.invalidateCache(['guests', 'rooms']); return this.apiCall(`/guests/${id}`, 'PUT', data); }
+  public async checkOutGuest(id: string) { this.invalidateCache(['guests', 'rooms', 'stats']); return this.apiCall(`/guests/${id}`, 'DELETE'); }
 
   // --- MOCK FALLBACK IMPLEMENTATION ---
   private handleMockFallback(endpoint: string, method: string, data: any): { success: boolean, message?: string, data?: any } {
@@ -274,6 +283,7 @@ class DormService {
               const room = MOCK_ROOMS.find(r => r.id === data.roomId);
               if (!room) return { success: false, message: "Phòng không tồn tại (Mock)" };
               if (room.currentCapacity >= room.maxCapacity) return { success: false, message: "Phòng đã đầy (Mock)" };
+              if (MOCK_STUDENTS.some(s => s.studentCode === data.studentCode)) return { success: false, message: "Mã sinh viên đã tồn tại (Mock)" };
 
               const newStudent = { id: `s${Date.now()}`, ...data };
               MOCK_STUDENTS.push(newStudent);
@@ -286,12 +296,16 @@ class DormService {
               const idx = MOCK_STUDENTS.findIndex(s => s.id === id);
               if (idx > -1) {
                   const student = MOCK_STUDENTS[idx];
+                  // Cập nhật lại phòng
                   const room = MOCK_ROOMS.find(r => r.id === student.roomId);
                   if (room) {
                       room.currentCapacity = Math.max(0, room.currentCapacity - 1);
-                      if (room.currentCapacity < room.maxCapacity) room.status = RoomStatus.AVAILABLE;
+                      if (room.currentCapacity < room.maxCapacity && room.status === RoomStatus.FULL) {
+                          room.status = RoomStatus.AVAILABLE;
+                      }
                   }
                   MOCK_STUDENTS.splice(idx, 1);
+                  if (this.cache.students) this.cache.students = this.cache.students.filter(s => s.id !== id);
               }
               return { success: true };
           }
@@ -378,9 +392,26 @@ class DormService {
           if (method === 'POST') { MOCK_ROOMS.push({ id: `r${Date.now()}`, currentCapacity: 0, ...data }); return { success: true }; }
           if (method === 'DELETE') {
              const id = endpoint.split('/').pop();
-             const room = MOCK_ROOMS.find(r => r.id === id);
-             if (room && room.currentCapacity > 0) return { success: false, message: "Phòng đang có người, không thể xóa (Mock)" };
+             
+             // 1. Check if room has students
+             const hasStudents = MOCK_STUDENTS.some(s => s.roomId === id);
+             if (hasStudents) return { success: false, message: "Phòng đang có sinh viên, không thể xóa (Mock)" };
 
+             // 2. Check if room has guests
+             const hasGuests = MOCK_GUESTS.some(g => g.roomId === id);
+             if (hasGuests) return { success: false, message: "Phòng đang có khách lưu trú, không thể xóa (Mock)" };
+
+             // 3. Cascade Delete: Assets
+             for (let i = MOCK_ASSETS.length - 1; i >= 0; i--) {
+                 if (MOCK_ASSETS[i].roomId === id) MOCK_ASSETS.splice(i, 1);
+             }
+
+             // 4. Cascade Delete: Bills
+             for (let i = MOCK_BILLS.length - 1; i >= 0; i--) {
+                 if (MOCK_BILLS[i].roomId === id) MOCK_BILLS.splice(i, 1);
+             }
+
+             // 5. Delete Room
              const idx = MOCK_ROOMS.findIndex(r => r.id === id);
              if(idx > -1) MOCK_ROOMS.splice(idx, 1);
              return { success: true };
@@ -425,17 +456,46 @@ class DormService {
       }
 
       if (endpoint.startsWith('/guests')) {
-        if (method === 'POST') { MOCK_GUESTS.push({ id: `g${Date.now()}`, ...data }); return { success: true }; }
+        if (method === 'POST') {
+            const room = MOCK_ROOMS.find(r => r.id === data.roomId);
+            if (!room) return { success: false, message: "Phòng không tồn tại" };
+            if (room.currentCapacity >= room.maxCapacity) return { success: false, message: "Phòng đã đầy" };
+
+            const newGuest = { id: `g${Date.now()}`, ...data };
+            MOCK_GUESTS.push(newGuest);
+            if (this.cache.guests) this.cache.guests.push(newGuest);
+            
+            room.currentCapacity++;
+            if(room.currentCapacity >= room.maxCapacity) room.status = RoomStatus.FULL;
+
+            return { success: true, data: newGuest };
+        }
         if (method === 'DELETE') {
             const id = endpoint.split('/').pop();
             const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-            if (idx > -1) MOCK_GUESTS.splice(idx, 1);
+            if (idx > -1) {
+                const guest = MOCK_GUESTS[idx];
+                const room = MOCK_ROOMS.find(r => r.id === guest.roomId);
+                if (room) {
+                    room.currentCapacity = Math.max(0, room.currentCapacity - 1);
+                    if (room.currentCapacity < room.maxCapacity && room.status === RoomStatus.FULL) {
+                        room.status = RoomStatus.AVAILABLE;
+                    }
+                }
+                MOCK_GUESTS.splice(idx, 1);
+                if (this.cache.guests) this.cache.guests = this.cache.guests.filter(g => g.id !== id);
+            }
             return { success: true };
         }
         if (method === 'PUT') {
             const id = endpoint.split('/').pop();
             const idx = MOCK_GUESTS.findIndex(g => g.id === id);
-            if (idx > -1) MOCK_GUESTS[idx] = { ...MOCK_GUESTS[idx], ...data };
+            if (idx > -1) {
+                MOCK_GUESTS[idx] = { ...MOCK_GUESTS[idx], ...data };
+                if (this.cache.guests) {
+                    this.cache.guests = this.cache.guests.map(g => g.id === id ? MOCK_GUESTS[idx] : g);
+                }
+            }
             return { success: true };
         }
       }

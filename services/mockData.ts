@@ -1,4 +1,5 @@
 
+
 import { Room, RoomStatus, Student, Building, Bill, Asset, AssetStatus, User, Role, Guest } from '../types';
 
 export const MOCK_USERS: User[] = [
@@ -46,5 +47,5 @@ export const MOCK_BILLS: Bill[] = [
 ];
 
 export const MOCK_GUESTS: Guest[] = [
-    { id: 'g1', name: 'Nguyễn Thị Khách', cccd: '0123456789', relation: 'Chị gái', roomId: 'r2', checkInDate: '2023-10-25', checkOutDate: '2023-10-27' },
+    { id: 'g1', name: 'Phạm Văn Khách', cccd: '001203000001', relation: 'Bố', roomId: 'r1', checkInDate: '2023-10-25', checkOutDate: '2023-10-26' }
 ];

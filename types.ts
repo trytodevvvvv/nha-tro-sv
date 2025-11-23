@@ -1,4 +1,5 @@
 
+
 export enum RoomStatus {
   AVAILABLE = 'AVAILABLE',
   FULL = 'FULL',
@@ -50,16 +51,6 @@ export interface Student {
   university?: string;
 }
 
-export interface Guest {
-  id: string;
-  name: string;
-  cccd: string;
-  relation: string;
-  roomId: string;
-  checkInDate: string;
-  checkOutDate: string;
-}
-
 export interface Bill {
   id: string;
   roomId: string;
@@ -86,9 +77,9 @@ export interface Asset {
 
 export interface DashboardStats {
   totalRooms: number;
-  occupiedRooms: number; // Partially or Fully occupied
+  occupiedRooms: number;
   fullRooms: number;
-  availableRooms: number; // Totally empty
+  availableRooms: number;
   totalStudents: number;
   occupancyRate: number;
 }
@@ -105,4 +96,14 @@ export interface Notification {
   type: 'warning' | 'danger' | 'info';
   message: string;
   timestamp: string;
+}
+
+export interface Guest {
+  id: string;
+  name: string;
+  cccd: string;
+  relation: string;
+  roomId: string;
+  checkInDate: string;
+  checkOutDate: string;
 }

@@ -294,7 +294,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                             onClick={() => setActiveDetailTab('residents')}
                             className={`py-4 px-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeDetailTab === 'residents' ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}`}
                         >
-                            <Users size={16}/> Cư dân
+                            <Users size={16}/> Sinh viên
                         </button>
                         <button 
                             onClick={() => setActiveDetailTab('assets')}
@@ -317,7 +317,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                                 {/* Students Section */}
                                 <div>
                                     <h3 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-3 flex items-center gap-2 tracking-wider">
-                                        Sinh viên ({roomStudents.length})
+                                        Danh sách sinh viên ({roomStudents.length})
                                     </h3>
                                     <div className="space-y-2">
                                         {roomStudents.length > 0 ? (
