@@ -14,6 +14,9 @@ const Dashboard: React.FC = () => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Chart Filter State
+  const [chartFilter, setChartFilter] = useState<'6M' | 'Y' | 'ALL'>('6M');
+  
   // State đảm bảo container đã có kích thước thật trước khi vẽ biểu đồ
   const [isChartReady, setIsChartReady] = useState(false);
 
@@ -35,7 +38,6 @@ const Dashboard: React.FC = () => {
                 setLoading(false);
                 
                 // CRITICAL FIX: Đợi 100ms để DOM layout ổn định kích thước rồi mới cho phép vẽ biểu đồ
-                // Điều này khắc phục triệt để lỗi width(-1)
                 setTimeout(() => {
                     if (mounted) setIsChartReady(true);
                 }, 100);
@@ -60,6 +62,33 @@ const Dashboard: React.FC = () => {
     setAiReport(report);
     setLoadingAi(false);
   };
+
+  // --- CHART FILTER LOGIC ---
+  const getFilteredRevenue = () => {
+      if (chartFilter === 'ALL') return revenueData;
+
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      
+      if (chartFilter === 'Y') {
+          // Lọc theo năm hiện tại
+          return revenueData.filter(d => d.month.startsWith(String(currentYear)));
+      }
+
+      if (chartFilter === '6M') {
+          // Lấy 6 tháng gần nhất (bao gồm tháng hiện tại)
+          // Tạo mốc thời gian 5 tháng trước
+          const cutoffDate = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+          // Chuyển mốc cutoff thành chuỗi YYYY-MM để so sánh
+          const cutoffStr = cutoffDate.toISOString().slice(0, 7); // "2024-06"
+          
+          return revenueData.filter(d => d.month >= cutoffStr);
+      }
+
+      return revenueData;
+  };
+
+  const filteredRevenueData = getFilteredRevenue();
 
   if (loading && !stats) return (
     <div className="min-h-[500px] flex flex-col items-center justify-center text-gray-400">
@@ -198,16 +227,32 @@ const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Theo dõi thu nhập từ tiền phòng và dịch vụ</p>
               </div>
               <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-700/50 p-1 rounded-lg">
-                 <button className="px-3 py-1 bg-white dark:bg-gray-600 text-xs font-bold rounded-md shadow-sm text-gray-800 dark:text-white">6 Tháng</button>
-                 <button className="px-3 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white transition-colors">Năm nay</button>
+                 <button 
+                    onClick={() => setChartFilter('6M')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md shadow-sm transition-colors ${chartFilter === '6M' ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                 >
+                    6 Tháng
+                 </button>
+                 <button 
+                    onClick={() => setChartFilter('Y')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md shadow-sm transition-colors ${chartFilter === 'Y' ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                 >
+                    Năm nay
+                 </button>
+                 <button 
+                    onClick={() => setChartFilter('ALL')}
+                    className={`px-3 py-1 text-xs font-bold rounded-md shadow-sm transition-colors ${chartFilter === 'ALL' ? 'bg-white dark:bg-gray-600 text-gray-800 dark:text-white' : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white'}`}
+                 >
+                    Tất cả
+                 </button>
               </div>
            </div>
            
            {/* Chart Container - FIX TRIỆT ĐỂ: Gán cứng style width/height */}
            <div className="w-full bg-gray-50/50 dark:bg-gray-900/20 rounded-xl p-2 relative" style={{ width: '100%', height: 400 }}>
-             {revenueData.length > 0 && isChartReady ? (
+             {filteredRevenueData.length > 0 && isChartReady ? (
                 <ResponsiveContainer width="100%" height="100%" debounce={50} minWidth={0} minHeight={0}>
-                  <BarChart data={revenueData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                  <BarChart data={filteredRevenueData} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" className="dark:opacity-10" />
                     <XAxis 
                         dataKey="month" 
@@ -231,10 +276,10 @@ const Dashboard: React.FC = () => {
                 </ResponsiveContainer>
              ) : (
                 <div className="h-full flex flex-col items-center justify-center text-gray-400 dark:text-gray-500">
-                   {revenueData.length === 0 ? (
+                   {filteredRevenueData.length === 0 ? (
                       <>
                         <TrendingUp size={40} className="mb-4 opacity-20"/>
-                        <p>Chưa có dữ liệu hiển thị</p>
+                        <p>Chưa có dữ liệu hiển thị cho bộ lọc này</p>
                       </>
                    ) : (
                       /* Skeleton Loader */

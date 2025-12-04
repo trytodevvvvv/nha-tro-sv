@@ -317,11 +317,15 @@ class DormService {
               const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
               const total = elec + water + Number(data.roomFee);
 
+              // Calculate Due Date: 9th of the bill's month
+              const [year, month] = data.month.split('-').map(Number);
+              const dueDate = new Date(year, month - 1, 9, 12, 0, 0).toISOString();
+
               const newBill = { 
                   id: `bill${Date.now()}`, 
                   status: 'UNPAID', 
                   createdAt: new Date().toISOString(), 
-                  dueDate: new Date(Date.now() + 5*86400000).toISOString(), 
+                  dueDate: dueDate, 
                   totalAmount: total,
                   ...data 
               };
@@ -346,7 +350,14 @@ class DormService {
                   const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
                   const total = elec + water + Number(data.roomFee);
                   
-                  const updatedBill = { ...MOCK_BILLS[idx], ...data, totalAmount: total };
+                  // Update Due Date if month changed
+                  let dueDate = MOCK_BILLS[idx].dueDate;
+                  if (data.month) {
+                      const [year, month] = data.month.split('-').map(Number);
+                      dueDate = new Date(year, month - 1, 9, 12, 0, 0).toISOString();
+                  }
+
+                  const updatedBill = { ...MOCK_BILLS[idx], ...data, totalAmount: total, dueDate };
                   MOCK_BILLS[idx] = updatedBill;
                   
                   if (this.cache.bills) {
