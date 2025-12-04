@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { User, Role } from '../types';
 import { dormService } from '../services/dormService';
 import { Plus, User as UserIcon, Trash2, Shield, Edit, X, Key } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface UserManagerProps {
     currentUser: User;
@@ -13,6 +15,12 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Confirmation State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    userId: string | null;
+  }>({ isOpen: false, userId: null });
+
   const [formData, setFormData] = useState({
       username: '',
       password: '',
@@ -56,23 +64,28 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
       setShowModal(true);
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
       if (id === currentUser.id) {
           alert("Bạn không thể tự xóa tài khoản của chính mình!");
           return;
       }
-      if (window.confirm("Bạn có chắc muốn xóa tài khoản này?")) {
+      setConfirmModal({ isOpen: true, userId: id });
+  };
+
+  const confirmDelete = async () => {
+      if (confirmModal.userId) {
           // OPTIMISTIC UPDATE: Xóa ngay lập tức trên giao diện
-          setUsers(prev => prev.filter(u => u.id !== id));
+          setUsers(prev => prev.filter(u => u.id !== confirmModal.userId));
           
           // Gọi API xóa ngầm
-          await dormService.deleteUser(id);
+          await dormService.deleteUser(confirmModal.userId);
           
           // Đồng bộ lại để chắc chắn
           fetchData();
       }
+      setConfirmModal({ isOpen: false, userId: null });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -159,7 +172,7 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
                                 </button>
                                 <button 
                                     type="button"
-                                    onClick={(e) => handleDelete(u.id, e)} 
+                                    onClick={(e) => handleDeleteClick(u.id, e)} 
                                     disabled={u.id === currentUser.id}
                                     className={`p-2 rounded transition-colors ${u.id === currentUser.id ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
                                     title="Xóa"
@@ -174,9 +187,19 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
         </table>
       </div>
 
-      {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-fade-in-up">
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmDelete}
+        title="Xóa Tài Khoản"
+        message="Bạn có chắc chắn muốn xóa tài khoản này không? Hành động này không thể hoàn tác."
+        confirmText="Xóa Tài Khoản"
+        type="danger"
+      />
+
+      {showModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
                   <div className="flex justify-between mb-6">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật Tài khoản' : 'Thêm Nhân viên mới'}</h3>
                       <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"/></button>
@@ -217,7 +240,8 @@ const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
                       </button>
                   </form>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
     </div>
   );

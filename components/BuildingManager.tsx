@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Trash2, Building2, Edit, Save, X } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Building, Role } from '../types';
+import ConfirmationModal from './ConfirmationModal';
 
 interface BuildingManagerProps {
     role: Role;
@@ -13,6 +14,12 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
   const [newBuildingName, setNewBuildingName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  
+  // Confirmation State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    buildingId: string | null;
+  }>({ isOpen: false, buildingId: null });
 
   const fetchData = async () => {
       try {
@@ -31,18 +38,23 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
     setNewBuildingName('');
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if(window.confirm("Xóa tòa nhà này?")) {
-          const res = await dormService.deleteBuilding(id);
+      setConfirmModal({ isOpen: true, buildingId: id });
+  };
+
+  const confirmDelete = async () => {
+      if (confirmModal.buildingId) {
+          const res = await dormService.deleteBuilding(confirmModal.buildingId);
           if(res.success) {
-              setBuildings(prev => prev.filter(b => b.id !== id)); // Optimistic update
+              setBuildings(prev => prev.filter(b => b.id !== confirmModal.buildingId)); // Optimistic update
               fetchData();
           } else {
               alert(res.message || "Không thể xóa tòa nhà này (Có thể còn phòng).");
           }
       }
+      setConfirmModal({ isOpen: false, buildingId: null });
   };
 
   const startEdit = (b: Building) => {
@@ -61,7 +73,7 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
   const editInputClass = "border border-gray-300 dark:border-gray-600 rounded px-2 py-1 outline-indigo-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white";
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    <div className="space-y-6 max-w-3xl mx-auto animate-fade-in">
       <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý Tòa nhà</h2>
       
       {role === Role.ADMIN && (
@@ -97,7 +109,6 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
                       ) : (
                           <div>
                               <span className="font-medium text-gray-800 dark:text-white block">{b.name}</span>
-                              <span className="text-xs text-gray-400">ID: {b.id}</span>
                           </div>
                       )}
                   </div>
@@ -114,7 +125,7 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
                                   <button type="button" onClick={() => startEdit(b)} className="text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-2">
                                       <Edit size={18} />
                                   </button>
-                                  <button type="button" onClick={(e) => handleDelete(b.id, e)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2">
+                                  <button type="button" onClick={(e) => handleDeleteClick(b.id, e)} className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 p-2">
                                       <Trash2 size={18} />
                                   </button>
                               </>
@@ -124,6 +135,16 @@ const BuildingManager: React.FC<BuildingManagerProps> = ({ role }) => {
               </div>
           ))}
       </div>
+
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmDelete}
+        title="Xóa Tòa Nhà"
+        message="Bạn có chắc muốn xóa tòa nhà này không? Bạn chỉ có thể xóa nếu tòa nhà không còn phòng nào."
+        confirmText="Xóa Tòa Nhà"
+        type="danger"
+      />
     </div>
   );
 };

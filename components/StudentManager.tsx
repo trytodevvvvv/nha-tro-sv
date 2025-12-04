@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Search, Trash2, User, MapPin, GraduationCap, X, Edit, Hash } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Student, Role, Room } from '../types';
+import ConfirmationModal from './ConfirmationModal';
 
 interface StudentManagerProps {
   onUpdate: () => void;
@@ -14,6 +16,12 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   // Only show initial loading if no data exists at all
   const [loading, setLoading] = useState(true);
+
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    studentId: string | null;
+  }>({ isOpen: false, studentId: null });
 
   const fetchData = async (isBackground = false) => {
       if (!isBackground) setLoading(true);
@@ -42,11 +50,15 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
     university: ''
   });
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if(window.confirm("Bạn có chắc muốn xóa sinh viên này không?")) {
-          const result = await dormService.deleteStudent(id);
+      setConfirmModal({ isOpen: true, studentId: id });
+  };
+
+  const confirmDelete = async () => {
+      if (confirmModal.studentId) {
+          const result = await dormService.deleteStudent(confirmModal.studentId);
           if (result.success) {
              fetchData(true); // Background refresh
              onUpdate();
@@ -54,6 +66,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
              alert(result.message || "Xóa thất bại");
           }
       }
+      setConfirmModal({ isOpen: false, studentId: null });
   };
 
   const handleEdit = (s: Student, e: React.MouseEvent) => {
@@ -175,7 +188,7 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
                                 {role === Role.ADMIN && (
                                     <button 
                                         type="button"
-                                        onClick={(e) => handleDelete(s.id, e)} 
+                                        onClick={(e) => handleDeleteClick(s.id, e)} 
                                         className="text-gray-400 hover:text-red-600 p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
                                     >
                                         <Trash2 size={16} />
@@ -189,9 +202,19 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
         </table>
       </div>
 
-      {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 dark:border-gray-700">
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmDelete}
+        title="Xóa Sinh viên"
+        message="Bạn có chắc chắn muốn xóa sinh viên này khỏi hệ thống? Hành động này không thể hoàn tác và sẽ cập nhật lại sĩ số phòng."
+        confirmText="Xóa Sinh viên"
+        type="danger"
+      />
+
+      {showModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 dark:border-gray-700 animate-scale-in">
                   <div className="flex justify-between mb-4">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật thông tin' : 'Thêm Sinh viên mới'}</h3>
                       <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"/></button>
@@ -231,7 +254,8 @@ const StudentManager: React.FC<StudentManagerProps> = ({ onUpdate, role }) => {
                       </button>
                   </form>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
     </div>
   );

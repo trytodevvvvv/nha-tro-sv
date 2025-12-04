@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Trash2, Edit, X, Calendar, CheckCircle, AlertTriangle, DollarSign, Droplets, Zap, Home, Filter, RefreshCcw, Lock } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Bill, Role, Room } from '../types';
+import ConfirmationModal from './ConfirmationModal';
 
 interface BillManagerProps {
     role: Role;
@@ -15,6 +17,25 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'ALL' | 'UNPAID' | 'PAID' | 'OVERDUE'>('ALL');
   
+  // Generic Confirmation State
+  const [confirmConfig, setConfirmConfig] = useState<{
+      isOpen: boolean;
+      action: 'PAY' | 'UNPAY' | 'DELETE' | null;
+      billId: string | null;
+      title: string;
+      message: string;
+      type: 'danger' | 'warning' | 'success';
+      confirmText: string;
+  }>({
+      isOpen: false,
+      action: null,
+      billId: null,
+      title: '',
+      message: '',
+      type: 'danger',
+      confirmText: 'Xác nhận'
+  });
+
   const fetchData = async () => {
       try {
           const [b, r] = await Promise.all([dormService.getBills(), dormService.getRooms()]);
@@ -131,65 +152,77 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
       setEditingId(null);
   };
 
-  const handlePay = async (e: React.MouseEvent, id: string) => {
+  const handlePayClick = (e: React.MouseEvent, id: string) => {
       e.stopPropagation();
-      e.preventDefault();
-      if(window.confirm("Xác nhận đã thu tiền đầy đủ cho hóa đơn này?")) {
-        const res = await dormService.payBill(id);
-        if (res.success) {
-            // OPTIMISTIC UPDATE: Cập nhật giao diện ngay lập tức
-            setBills(prevBills => prevBills.map(b => {
-                if (b.id === id) {
-                    return { 
-                        ...b, 
-                        status: 'PAID', 
-                        paymentDate: new Date().toISOString() 
-                    };
-                }
-                return b;
-            }));
-            // Gọi fetch chạy ngầm để đồng bộ
+      setConfirmConfig({
+          isOpen: true,
+          action: 'PAY',
+          billId: id,
+          title: 'Xác nhận thu tiền',
+          message: 'Xác nhận đã thu đủ tiền cho hóa đơn này? Trạng thái sẽ chuyển sang "Đã thanh toán".',
+          type: 'success',
+          confirmText: 'Xác nhận Thu tiền'
+      });
+  };
+
+  const handleUnpayClick = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setConfirmConfig({
+          isOpen: true,
+          action: 'UNPAY',
+          billId: id,
+          title: 'Hủy trạng thái thanh toán',
+          message: 'Bạn có chắc muốn hoàn tác trạng thái thanh toán? Hóa đơn sẽ trở về trạng thái "Chưa thu".',
+          type: 'warning',
+          confirmText: 'Hủy thanh toán'
+      });
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      setConfirmConfig({
+          isOpen: true,
+          action: 'DELETE',
+          billId: id,
+          title: 'Xóa hóa đơn',
+          message: 'Bạn có chắc muốn xóa vĩnh viễn hóa đơn này khỏi hệ thống không?',
+          type: 'danger',
+          confirmText: 'Xóa Hóa đơn'
+      });
+  };
+
+  const executeConfirmAction = async () => {
+      const { action, billId } = confirmConfig;
+      if (!billId) return;
+
+      if (action === 'PAY') {
+          const res = await dormService.payBill(billId);
+          if (res.success) {
+            setBills(prevBills => prevBills.map(b => 
+                b.id === billId ? { ...b, status: 'PAID', paymentDate: new Date().toISOString() } : b
+            ));
             fetchData(); 
-            if (onUpdate) onUpdate(); // Update notifications
-        } else {
-            alert("Lỗi thanh toán: " + (res.message || "Không xác định"));
-        }
-      }
-  };
-
-  const handleUnpay = async (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      e.preventDefault();
-      if(window.confirm("Hủy trạng thái 'Đã thanh toán'? Hóa đơn sẽ trở về trạng thái 'Chưa thu'.")) {
-        const res = await dormService.unpayBill(id);
-        if (res.success) {
-            // OPTIMISTIC UPDATE: Cập nhật giao diện ngay lập tức
-            setBills(prevBills => prevBills.map(b => {
-                if (b.id === id) {
-                    return { 
-                        ...b, 
-                        status: 'UNPAID', 
-                        paymentDate: undefined 
-                    };
-                }
-                return b;
-            }));
-            // Gọi fetch chạy ngầm để đồng bộ
+            if (onUpdate) onUpdate();
+          } else {
+            alert("Lỗi: " + (res.message || "Không xác định"));
+          }
+      } else if (action === 'UNPAY') {
+          const res = await dormService.unpayBill(billId);
+          if (res.success) {
+            setBills(prevBills => prevBills.map(b => 
+                b.id === billId ? { ...b, status: 'UNPAID', paymentDate: undefined } : b
+            ));
             fetchData();
-            if (onUpdate) onUpdate(); // Update notifications
-        }
-      }
-  };
-
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if(window.confirm("Bạn có chắc muốn xóa hóa đơn này không?")) {
-          await dormService.deleteBill(id);
-          setBills(prev => prev.filter(b => b.id !== id)); // Xóa ngay khỏi UI
+            if (onUpdate) onUpdate();
+          }
+      } else if (action === 'DELETE') {
+          await dormService.deleteBill(billId);
+          setBills(prev => prev.filter(b => b.id !== billId));
           fetchData();
-          if (onUpdate) onUpdate(); // Update notifications
+          if (onUpdate) onUpdate();
       }
+
+      setConfirmConfig({ ...confirmConfig, isOpen: false, billId: null, action: null });
   };
 
   const isOverdue = (bill: Bill) => {
@@ -346,7 +379,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
                                     {isPaid ? (
                                         <button 
                                             type="button"
-                                            onClick={(e) => handleUnpay(e, bill.id)} 
+                                            onClick={(e) => handleUnpayClick(e, bill.id)} 
                                             className="p-2 text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors"
                                             title="Hủy thanh toán (Undo)"
                                         >
@@ -364,7 +397,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
                                     )}
                                     <button 
                                         type="button"
-                                        onClick={(e) => handleDelete(bill.id, e)} 
+                                        onClick={(e) => handleDeleteClick(e, bill.id)} 
                                         className="p-2 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                                         title="Xóa"
                                     >
@@ -438,7 +471,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
                                     </div>
                                 ) : (
                                     <button 
-                                    onClick={(e) => handlePay(e, bill.id)} 
+                                    onClick={(e) => handlePayClick(e, bill.id)} 
                                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-600 dark:hover:bg-indigo-500 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-indigo-200 dark:shadow-none active:scale-95"
                                     >
                                         <DollarSign size={16}/> Xác nhận thu tiền
@@ -452,10 +485,20 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
           )}
       </div>
 
+      <ConfirmationModal
+          isOpen={confirmConfig.isOpen}
+          onClose={() => setConfirmConfig({...confirmConfig, isOpen: false, billId: null, action: null})}
+          onConfirm={executeConfirmAction}
+          title={confirmConfig.title}
+          message={confirmConfig.message}
+          confirmText={confirmConfig.confirmText}
+          type={confirmConfig.type}
+      />
+
       {/* Add/Edit Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 dark:border-gray-700 max-h-[90vh] overflow-y-auto animate-fade-in-up">
+      {showModal && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 dark:border-gray-700 max-h-[90vh] overflow-y-auto animate-scale-in">
                 <div className="flex justify-between mb-6">
                     <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật Hóa Đơn' : 'Lập Hóa Đơn Mới'}</h3>
                     <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X/></button>
@@ -528,7 +571,8 @@ const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
                     </button>
                 </form>
             </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

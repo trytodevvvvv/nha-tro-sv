@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { dormService } from '../services/dormService';
 import { RoomStatus, Room, Role, Building, Student, Asset, AssetStatus } from '../types';
 import { Plus, X, Trash2, Save, Users, DollarSign, Monitor, ShieldCheck, AlertTriangle, Wrench, CheckCircle } from 'lucide-react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface RoomManagerProps {
     onUpdate: () => void;
@@ -13,6 +15,12 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Confirmation State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    roomId: string | null;
+  }>({ isOpen: false, roomId: null });
 
   // Data fetching
   const fetchData = async () => {
@@ -77,11 +85,15 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
       }
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if(window.confirm("Bạn có chắc muốn xóa phòng này?")) {
-          const res = await dormService.deleteRoom(id);
+      setConfirmModal({ isOpen: true, roomId: id });
+  };
+
+  const confirmDelete = async () => {
+      if (confirmModal.roomId) {
+          const res = await dormService.deleteRoom(confirmModal.roomId);
           if(res.success) {
               fetchData();
               onUpdate();
@@ -89,6 +101,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
               alert("Lỗi: " + res.message);
           }
       }
+      setConfirmModal({ isOpen: false, roomId: null });
   };
 
   const openDetailModal = async (room: Room) => {
@@ -155,7 +168,7 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
             {role === Role.ADMIN && (
                 <button 
                     type="button"
-                    onClick={(e) => handleDelete(room.id, e)} 
+                    onClick={(e) => handleDeleteClick(room.id, e)} 
                     className="absolute top-2 right-2 z-10 bg-white dark:bg-gray-700 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 p-1.5 rounded-full shadow-md border border-gray-200 dark:border-gray-600 transition-transform hover:scale-110 active:scale-95"
                     title="Xóa phòng"
                 >
@@ -189,10 +202,20 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
         ))}
         </div>
 
+        <ConfirmationModal
+            isOpen={confirmModal.isOpen}
+            onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+            onConfirm={confirmDelete}
+            title="Xóa Phòng"
+            message="Bạn có chắc muốn xóa phòng này không? Hành động này sẽ xóa luôn hóa đơn và tài sản liên quan đến phòng."
+            confirmText="Xóa Phòng"
+            type="danger"
+        />
+
         {/* Add Room Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-fade-in border border-gray-200 dark:border-gray-700">
+        {showAddModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl animate-scale-in border border-gray-200 dark:border-gray-700">
                   <div className="flex justify-between mb-4">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">Thêm Phòng Mới</h3>
                       <button onClick={() => setShowAddModal(false)}><X className="text-gray-400 dark:text-gray-500 hover:text-gray-600"/></button>
@@ -223,13 +246,14 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                       <button type="submit" className="w-full bg-indigo-600 text-white py-2 rounded-lg font-medium hover:bg-indigo-700 mt-2">Tạo Phòng</button>
                   </form>
               </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* Room Details Modal */}
-        {selectedRoom && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-                <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl h-[650px] shadow-2xl flex flex-col overflow-hidden animate-fade-in border border-gray-200 dark:border-gray-700">
+        {selectedRoom && createPortal(
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl h-[650px] shadow-2xl flex flex-col overflow-hidden animate-scale-in border border-gray-200 dark:border-gray-700">
                     {/* Modal Header & Quick Stats */}
                     <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
                         <div className="flex justify-between items-start mb-4">
@@ -449,7 +473,8 @@ const RoomManager: React.FC<RoomManagerProps> = ({ onUpdate, role }) => {
                         )}
                     </div>
                 </div>
-            </div>
+            </div>,
+            document.body
         )}
     </div>
   );

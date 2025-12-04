@@ -1,6 +1,19 @@
 
 import { Room, RoomStatus, Student, Building, Bill, Asset, AssetStatus, User, Role } from '../types';
 
+// Helper to generate dynamic dates based on current time
+const now = new Date();
+const currentYear = now.getFullYear();
+const currentMonth = now.getMonth() + 1; // 1-12
+const monthStr = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
+const createdDate = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
+
+// Set due date to 10th of current month
+// If today is > 10th, it will show as Overdue (Danger).
+// If today is <= 10th, it will show as Warning or Info.
+const dueDateObj = new Date(now.getFullYear(), now.getMonth(), 10);
+const dueDate = dueDateObj.toISOString();
+
 export const MOCK_USERS: User[] = [
   { id: 'u1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: Role.ADMIN },
   { id: 'u2', username: 'staff', password: '123', fullName: 'Nhân Viên A', role: Role.STAFF },
@@ -41,6 +54,33 @@ export const MOCK_ASSETS: Asset[] = [
 ];
 
 export const MOCK_BILLS: Bill[] = [
-    { id: 'bill1', roomId: 'r1', month: '2023-10', electricIndexOld: 100, electricIndexNew: 150, waterIndexOld: 50, waterIndexNew: 60, roomFee: 2000000, totalAmount: 2275000, status: 'PAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
-    { id: 'bill2', roomId: 'r2', month: '2023-10', electricIndexOld: 80, electricIndexNew: 100, waterIndexOld: 40, waterIndexNew: 45, roomFee: 2000000, totalAmount: 2120000, status: 'UNPAID', createdAt: '2023-10-01', dueDate: '2023-10-06' },
+    { 
+        id: 'bill1', 
+        roomId: 'r1', 
+        month: monthStr, 
+        electricIndexOld: 100, 
+        electricIndexNew: 150, 
+        waterIndexOld: 50, 
+        waterIndexNew: 60, 
+        roomFee: 2000000, 
+        totalAmount: 2275000, 
+        status: 'PAID', 
+        createdAt: createdDate, 
+        dueDate: dueDate,
+        paymentDate: createdDate
+    },
+    { 
+        id: 'bill2', 
+        roomId: 'r2', 
+        month: monthStr, 
+        electricIndexOld: 80, 
+        electricIndexNew: 100, 
+        waterIndexOld: 40, 
+        waterIndexNew: 45, 
+        roomFee: 2000000, 
+        totalAmount: 2120000, 
+        status: 'UNPAID', 
+        createdAt: createdDate, 
+        dueDate: dueDate 
+    },
 ];

@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Plus, Monitor, AlertTriangle, CheckCircle, Wrench, Trash2, X, Edit } from 'lucide-react';
 import { dormService } from '../services/dormService';
 import { Asset, AssetStatus, Role, Room } from '../types';
+import ConfirmationModal from './ConfirmationModal';
 
 interface AssetManagerProps {
     role: Role;
@@ -14,6 +16,12 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // Confirmation State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    assetId: string | null;
+  }>({ isOpen: false, assetId: null });
+
   const [formData, setFormData] = useState({
       name: '',
       roomId: '',
@@ -77,24 +85,27 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
       fetchData();
   };
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      
       if (role !== Role.ADMIN) {
           alert("Bạn không có quyền xóa tài sản.");
           return;
       }
+      setConfirmModal({ isOpen: true, assetId: id });
+  };
 
-      if(window.confirm("Xóa tài sản này khỏi hệ thống?")) {
-        const res = await dormService.deleteAsset(id);
-        if (res.success) {
-            setAssets(prev => prev.filter(a => a.id !== id)); // Optimistic update
-            fetchData(); // Sync
-        } else {
-            alert(res.message || "Xóa thất bại");
-        }
+  const confirmDelete = async () => {
+      if (confirmModal.assetId) {
+          const res = await dormService.deleteAsset(confirmModal.assetId);
+          if (res.success) {
+              setAssets(prev => prev.filter(a => a.id !== confirmModal.assetId)); // Optimistic update
+              fetchData(); // Sync
+          } else {
+              alert(res.message || "Xóa thất bại");
+          }
       }
+      setConfirmModal({ isOpen: false, assetId: null });
   };
 
   const getStatusColor = (status: AssetStatus) => {
@@ -117,7 +128,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
   const inputClass = "p-2 border border-gray-300 dark:border-gray-600 rounded-lg w-full bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none placeholder-gray-400 dark:placeholder-gray-500";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Tài sản & Thiết bị</h2>
         <button 
@@ -178,7 +189,7 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
                               {role === Role.ADMIN && (
                                 <button 
                                     type="button"
-                                    onClick={(e) => handleDelete(asset.id, e)} 
+                                    onClick={(e) => handleDeleteClick(asset.id, e)} 
                                     className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                     title="Xóa tài sản"
                                 >
@@ -192,9 +203,19 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
           </table>
       </div>
 
-      {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700">
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmDelete}
+        title="Xóa Tài Sản"
+        message="Bạn có chắc muốn xóa tài sản này khỏi hệ thống không?"
+        confirmText="Xóa Tài Sản"
+        type="danger"
+      />
+
+      {showModal && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
                   <div className="flex justify-between mb-4">
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật Tài sản' : 'Thêm Tài sản mới'}</h3>
                       <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"/></button>
@@ -218,7 +239,8 @@ const AssetManager: React.FC<AssetManagerProps> = ({ role }) => {
                       </button>
                   </form>
               </div>
-          </div>
+          </div>,
+          document.body
       )}
     </div>
   );

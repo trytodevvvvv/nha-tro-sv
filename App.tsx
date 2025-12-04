@@ -25,7 +25,6 @@ const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState(() => {
       if (typeof window !== 'undefined') {
           const saved = localStorage.getItem('theme_mode');
-          // Prefer saved preference, otherwise fall back to system preference if needed
           return saved === 'dark';
       }
       return false;
@@ -46,7 +45,7 @@ const App: React.FC = () => {
       setDarkMode(prev => !prev);
   };
 
-  // Check for session on load
+  // Check for session
   useEffect(() => {
       const savedUser = localStorage.getItem('session_user');
       if (savedUser) {
@@ -113,6 +112,7 @@ const App: React.FC = () => {
       />
       
       <main className="flex-1 flex flex-col max-w-[100vw] overflow-x-hidden">
+        
         {/* Mobile Header */}
         <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4 flex justify-between items-center md:hidden sticky top-0 z-30">
           <h1 className="text-lg font-bold text-indigo-600 dark:text-indigo-400">QL Phòng Trọ</h1>
@@ -123,8 +123,8 @@ const App: React.FC = () => {
 
         {/* Top Bar (Desktop) */}
         <header className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 h-16 px-6 flex items-center justify-between sticky top-0 z-20 hidden md:flex transition-colors duration-200">
-          {/* Removed School Year Text */}
-          <div></div> 
+          <div>
+          </div> 
 
           <div className="flex items-center gap-4">
             
