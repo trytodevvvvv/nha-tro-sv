@@ -326,12 +326,16 @@ class DormService {
                   ...data 
               };
               MOCK_BILLS.push(newBill);
+              if (this.cache.bills) this.cache.bills.push(newBill);
               return { success: true };
           }
           if (method === 'DELETE') {
               const id = endpoint.split('/').pop();
               const idx = MOCK_BILLS.findIndex(b => b.id === id);
-              if (idx > -1) MOCK_BILLS.splice(idx, 1);
+              if (idx > -1) {
+                  MOCK_BILLS.splice(idx, 1);
+                  if (this.cache.bills) this.cache.bills = this.cache.bills.filter(b => b.id !== id);
+              }
               return { success: true };
           }
           if (method === 'PUT') {
@@ -341,7 +345,13 @@ class DormService {
                   const elec = Math.max(0, (data.electricIndexNew - data.electricIndexOld) * 3500);
                   const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
                   const total = elec + water + Number(data.roomFee);
-                  MOCK_BILLS[idx] = { ...MOCK_BILLS[idx], ...data, totalAmount: total };
+                  
+                  const updatedBill = { ...MOCK_BILLS[idx], ...data, totalAmount: total };
+                  MOCK_BILLS[idx] = updatedBill;
+                  
+                  if (this.cache.bills) {
+                      this.cache.bills = this.cache.bills.map(b => b.id === id ? updatedBill : b);
+                  }
               }
               return { success: true };
           }
@@ -451,6 +461,7 @@ class DormService {
   public getNotifications(): Notification[] {
      const notifications: Notification[] = [];
      const today = new Date();
+     // Always rely on cache first to get real-time updates after mutations
      const bills = this.cache.bills || MOCK_BILLS;
 
      bills.forEach(b => {

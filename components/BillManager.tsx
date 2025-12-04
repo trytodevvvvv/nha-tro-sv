@@ -6,9 +6,10 @@ import { Bill, Role, Room } from '../types';
 
 interface BillManagerProps {
     role: Role;
+    onUpdate?: () => void;
 }
 
-const BillManager: React.FC<BillManagerProps> = ({ role }) => {
+const BillManager: React.FC<BillManagerProps> = ({ role, onUpdate }) => {
   const [bills, setBills] = useState<Bill[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
@@ -125,6 +126,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
           await dormService.createBill(formData);
       }
       fetchData();
+      if (onUpdate) onUpdate(); // Trigger parent update for notifications
       setShowModal(false);
       setEditingId(null);
   };
@@ -148,6 +150,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
             }));
             // Gọi fetch chạy ngầm để đồng bộ
             fetchData(); 
+            if (onUpdate) onUpdate(); // Update notifications
         } else {
             alert("Lỗi thanh toán: " + (res.message || "Không xác định"));
         }
@@ -173,6 +176,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
             }));
             // Gọi fetch chạy ngầm để đồng bộ
             fetchData();
+            if (onUpdate) onUpdate(); // Update notifications
         }
       }
   };
@@ -184,6 +188,7 @@ const BillManager: React.FC<BillManagerProps> = ({ role }) => {
           await dormService.deleteBill(id);
           setBills(prev => prev.filter(b => b.id !== id)); // Xóa ngay khỏi UI
           fetchData();
+          if (onUpdate) onUpdate(); // Update notifications
       }
   };
 

@@ -91,7 +91,7 @@ const App: React.FC = () => {
       case 'buildings':
         return <BuildingManager key={dataVersion} role={currentUser.role} />;
       case 'bills':
-        return <BillManager key={dataVersion} role={currentUser.role} />;
+        return <BillManager key={dataVersion} role={currentUser.role} onUpdate={handleDataUpdate} />;
       case 'assets':
         return <AssetManager key={dataVersion} role={currentUser.role} />;
       case 'users':
