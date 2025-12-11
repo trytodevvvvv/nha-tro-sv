@@ -9,12 +9,11 @@ const monthStr = `${currentYear}-${currentMonth.toString().padStart(2, '0')}`;
 const createdDate = `${currentYear}-${currentMonth.toString().padStart(2, '0')}-01`;
 
 // Set due date to 10th of current month
-// If today is > 10th, it will show as Overdue (Danger).
-// If today is <= 10th, it will show as Warning or Info.
 const dueDateObj = new Date(now.getFullYear(), now.getMonth(), 10);
 const dueDate = dueDateObj.toISOString();
 
 export const MOCK_USERS: User[] = [
+  // CỐ ĐỊNH: Mật khẩu Offline là '123'
   { id: 'u1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: Role.ADMIN },
   { id: 'u2', username: 'staff', password: '123', fullName: 'Nhân Viên A', role: Role.STAFF },
 ];

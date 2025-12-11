@@ -1,6 +1,9 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { HashRouter } from 'react-router-dom';
 import App from './App';
+import { ToastProvider } from './contexts/ToastContext';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -9,5 +12,9 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-    <App />
+  <HashRouter>
+    <ToastProvider>
+      <App />
+    </ToastProvider>
+  </HashRouter>
 );

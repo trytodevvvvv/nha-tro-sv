@@ -1,17 +1,13 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { DashboardStats } from "../types";
 
 export const generateDashboardReport = async (stats: DashboardStats): Promise<string> => {
-  const apiKey = process.env.API_KEY;
-  
-  if (!apiKey) {
+  if (!process.env.API_KEY) {
     return "Thiếu API Key. Vui lòng cấu hình process.env.API_KEY.";
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const model = "gemini-2.5-flash";
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
       Bạn là trợ lý AI thông minh cho Hệ thống Quản lý Nhà trọ / Ký túc xá.
@@ -25,7 +21,7 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
     `;
 
     const response = await ai.models.generateContent({
-      model,
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 

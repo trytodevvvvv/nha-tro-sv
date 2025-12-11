@@ -3,245 +3,126 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { User, Role } from '../types';
 import { dormService } from '../services/dormService';
-import { Plus, User as UserIcon, Trash2, Shield, Edit, X, Key } from 'lucide-react';
+import { Plus, User as UserIcon, Trash2, Shield, Edit, X, Key, Crown, Search } from 'lucide-react';
 import ConfirmationModal from './ConfirmationModal';
+import { useToast } from '../contexts/ToastContext';
 
-interface UserManagerProps {
-    currentUser: User;
-}
+interface UserManagerProps { currentUser: User; }
 
 const UserManager: React.FC<UserManagerProps> = ({ currentUser }) => {
   const [users, setUsers] = useState<User[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState(''); // Search state
+  const { showToast } = useToast();
   
-  // Confirmation State
-  const [confirmModal, setConfirmModal] = useState<{
-    isOpen: boolean;
-    userId: string | null;
-  }>({ isOpen: false, userId: null });
-
-  const [formData, setFormData] = useState({
-      username: '',
-      password: '',
-      fullName: '',
-      role: Role.STAFF
-  });
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; userId: string | null; }>({ isOpen: false, userId: null });
+  const [formData, setFormData] = useState({ username: '', password: '', fullName: '', role: Role.STAFF });
 
   const fetchData = async () => {
-      try {
-        const u = await dormService.getUsers();
-        setUsers(u);
-      } catch (error) {
-          console.error("Failed to fetch users", error);
-      }
+      try { const u = await dormService.getUsers(); setUsers(u); } catch (error) {}
   };
+  useEffect(() => { fetchData(); }, []);
 
-  useEffect(() => {
-      fetchData();
-  }, []);
+  if (currentUser.role !== Role.ADMIN) return <div className="p-8 text-center text-red-500 font-bold bg-white/50 backdrop-blur-md rounded-2xl">Restricted Access</div>;
 
-  if (currentUser.role !== Role.ADMIN) {
-      return <div className="p-8 text-center text-red-500">Bạn không có quyền truy cập trang này.</div>;
-  }
-
-  const handleAddNew = () => {
-      setEditingId(null);
-      setFormData({ username: '', password: '', fullName: '', role: Role.STAFF });
-      setShowModal(true);
-  };
-
-  const handleEdit = (u: User, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setEditingId(u.id);
-      setFormData({
-          username: u.username,
-          password: u.password || '', 
-          fullName: u.fullName,
-          role: u.role
-      });
-      setShowModal(true);
-  };
-
-  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      if (id === currentUser.id) {
-          alert("Bạn không thể tự xóa tài khoản của chính mình!");
-          return;
-      }
-      setConfirmModal({ isOpen: true, userId: id });
-  };
-
-  const confirmDelete = async () => {
-      if (confirmModal.userId) {
-          // OPTIMISTIC UPDATE: Xóa ngay lập tức trên giao diện
-          setUsers(prev => prev.filter(u => u.id !== confirmModal.userId));
-          
-          // Gọi API xóa ngầm
-          await dormService.deleteUser(confirmModal.userId);
-          
-          // Đồng bộ lại để chắc chắn
-          fetchData();
-      }
-      setConfirmModal({ isOpen: false, userId: null });
-  };
-
+  const handleAddNew = () => { setEditingId(null); setFormData({ username: '', password: '', fullName: '', role: Role.STAFF }); setShowModal(true); };
+  const handleEdit = (u: User) => { setEditingId(u.id); setFormData({ username: u.username, password: u.password || '', fullName: u.fullName, role: u.role }); setShowModal(true); };
+  
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      let res;
-      
-      // OPTIMISTIC PREPARE
-      const tempUserStr = JSON.stringify({ ...formData, id: editingId || 'temp' });
-      const tempUser = JSON.parse(tempUserStr);
-
-      if (editingId) {
-          // Update UI ngay lập tức
-          setUsers(prev => prev.map(u => u.id === editingId ? { ...u, ...formData } : u));
-          res = await dormService.updateUser(editingId, formData);
-      } else {
-          res = await dormService.addUser(formData);
-          // Với Add, ta cần ID từ server trả về nên chờ res.data
-          if (res.success && res.data) {
-              setUsers(prev => [...prev, res.data]);
-          }
-      }
-
-      if (res.success !== false) {
-          // Background Refresh
-          if (!editingId && !res.data) fetchData(); 
-          setShowModal(false);
-      } else {
-          alert(res.message || "Lỗi không xác định");
-          fetchData(); // Revert nếu lỗi
-      }
+      if (editingId) await dormService.updateUser(editingId, formData);
+      else await dormService.addUser(formData);
+      showToast('Thành công', 'success'); fetchData(); setShowModal(false);
   };
+  
+  const confirmDelete = async () => {
+      if (confirmModal.userId) {
+          await dormService.deleteUser(confirmModal.userId);
+          setUsers(prev => prev.filter(u => u.id !== confirmModal.userId));
+          showToast('Đã xóa', 'success');
+      }
+      setConfirmModal({isOpen: false, userId: null});
+  }
+
+  // Filter Logic
+  const filteredUsers = users.filter(u => 
+      u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.username.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8 animate-fade-in max-w-[1200px] mx-auto">
+      <div className="flex flex-col md:flex-row justify-between items-end gap-6">
         <div>
-            <h2 className="text-2xl font-bold text-gray-800 dark:text-white">Quản lý Tài khoản</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Phân quyền và quản lý nhân viên hệ thống.</p>
+            <h2 className="text-3xl font-black text-gray-800 dark:text-white tracking-tight">Hệ thống</h2>
+            <p className="text-gray-500 dark:text-gray-400 font-medium mt-1">Quản lý người dùng & phân quyền.</p>
         </div>
-        <button 
-          onClick={handleAddNew}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-md"
-        >
-          <Plus size={18} />
-          Thêm Tài khoản
-        </button>
+        
+        <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-1 md:w-64">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
+                    <input 
+                        placeholder="Tìm người dùng..." 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-12 pr-4 py-3 bg-white/60 dark:bg-gray-800/60 backdrop-blur-md rounded-2xl border border-white/40 dark:border-gray-700/50 shadow-sm focus:ring-2 focus:ring-indigo-500/30 outline-none"
+                    />
+            </div>
+            <button onClick={handleAddNew} className="bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-6 py-3 rounded-2xl font-bold shadow-xl hover:scale-105 transition-all flex items-center gap-2 whitespace-nowrap">
+            <Plus size={20} /> Tài khoản
+            </button>
+        </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-        <table className="w-full text-left">
-            <thead className="bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs uppercase">
-                <tr>
-                    <th className="p-4">Họ và tên</th>
-                    <th className="p-4">Tên đăng nhập</th>
-                    <th className="p-4">Vai trò</th>
-                    <th className="p-4 text-right">Hành động</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
-                {users.map(u => (
-                    <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                        <td className="p-4 font-medium flex items-center gap-3 text-gray-900 dark:text-white">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/50 dark:text-purple-400' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'}`}>
-                                {u.role === Role.ADMIN ? <Shield size={16}/> : <UserIcon size={16}/>}
-                            </div>
-                            {u.fullName}
-                            {u.id === currentUser.id && <span className="text-xs bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-400 px-2 py-0.5 rounded-full ml-2">Bạn</span>}
-                        </td>
-                        <td className="p-4 text-gray-600 dark:text-gray-400 font-mono">{u.username}</td>
-                        <td className="p-4">
-                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
-                                {u.role === Role.ADMIN ? 'Quản trị viên' : 'Nhân viên'}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {filteredUsers.length > 0 ? (
+              filteredUsers.map(u => (
+                  <div key={u.id} className="group bg-white/40 dark:bg-gray-800/40 backdrop-blur-xl p-6 rounded-[2.5rem] border border-white/40 dark:border-gray-700/50 shadow-sm hover:shadow-[0_20px_40px_rgba(0,0,0,0.08)] transition-all flex items-center gap-6 relative overflow-hidden">
+                      {u.role === Role.ADMIN && <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>}
+                      
+                      <div className={`w-16 h-16 rounded-[1.2rem] flex items-center justify-center text-white shadow-lg ${u.role === Role.ADMIN ? 'bg-gradient-to-br from-purple-500 to-indigo-600' : 'bg-gradient-to-br from-gray-400 to-gray-500'}`}>
+                            {u.role === Role.ADMIN ? <Crown size={28}/> : <UserIcon size={28}/>}
+                      </div>
+
+                      <div className="flex-1">
+                            <h4 className="text-xl font-bold text-gray-900 dark:text-white">{u.fullName}</h4>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 font-mono mb-2">@{u.username}</p>
+                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide ${u.role === Role.ADMIN ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600'}`}>
+                                {u.role}
                             </span>
-                        </td>
-                        <td className="p-4 text-right">
-                            <div className="flex justify-end gap-2">
-                                <button 
-                                    type="button"
-                                    onClick={(e) => handleEdit(u, e)} 
-                                    className="p-2 text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded transition-colors"
-                                    title="Sửa"
-                                >
-                                    <Edit size={18}/>
-                                </button>
-                                <button 
-                                    type="button"
-                                    onClick={(e) => handleDeleteClick(u.id, e)} 
-                                    disabled={u.id === currentUser.id}
-                                    className={`p-2 rounded transition-colors ${u.id === currentUser.id ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed' : 'text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30'}`}
-                                    title="Xóa"
-                                >
-                                    <Trash2 size={18}/>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
+                      </div>
+
+                      <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleEdit(u)} className="p-3 bg-white dark:bg-gray-700 text-indigo-500 rounded-2xl shadow-sm hover:scale-110 transition-transform"><Edit size={18}/></button>
+                            {u.id !== currentUser.id && <button onClick={() => setConfirmModal({isOpen: true, userId: u.id})} className="p-3 bg-white dark:bg-gray-700 text-red-500 rounded-2xl shadow-sm hover:scale-110 transition-transform"><Trash2 size={18}/></button>}
+                      </div>
+                  </div>
+              ))
+          ) : (
+              <div className="col-span-full py-10 text-center text-gray-400 italic">Không tìm thấy tài khoản nào.</div>
+          )}
       </div>
 
-      <ConfirmationModal
-        isOpen={confirmModal.isOpen}
-        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-        onConfirm={confirmDelete}
-        title="Xóa Tài Khoản"
-        message="Bạn có chắc chắn muốn xóa tài khoản này không? Hành động này không thể hoàn tác."
-        confirmText="Xóa Tài Khoản"
-        type="danger"
-      />
+      <ConfirmationModal isOpen={confirmModal.isOpen} onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })} onConfirm={confirmDelete} title="Xóa Tài Khoản" message="Không thể hoàn tác." type="danger" />
 
       {showModal && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-              <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-200 dark:border-gray-700 animate-scale-in">
-                  <div className="flex justify-between mb-6">
-                      <h3 className="text-xl font-bold text-gray-900 dark:text-white">{editingId ? 'Cập nhật Tài khoản' : 'Thêm Nhân viên mới'}</h3>
-                      <button onClick={() => setShowModal(false)}><X className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"/></button>
-                  </div>
-                  
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-lg animate-fade-in">
+              <div className="bg-white/95 dark:bg-gray-800/95 backdrop-blur-2xl rounded-[2.5rem] w-full max-w-md p-8 shadow-2xl animate-scale-in border border-white/20">
+                  <h3 className="text-2xl font-black mb-6 dark:text-white">{editingId ? 'Cập nhật' : 'Thêm'} User</h3>
                   <form onSubmit={handleSubmit} className="space-y-4">
-                      <div className="space-y-1">
-                          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Họ và tên</label>
-                          <div className="relative">
-                              <UserIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
-                              <input required value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full pl-9 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" placeholder="Nguyễn Văn A" />
-                          </div>
-                      </div>
-                      
-                      <div className="space-y-1">
-                          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Tên đăng nhập</label>
-                          <input required disabled={!!editingId} value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none disabled:bg-gray-100 dark:disabled:bg-gray-800 disabled:text-gray-500" />
-                      </div>
-
-                      <div className="space-y-1">
-                          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Mật khẩu</label>
-                          <div className="relative">
-                              <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16}/>
-                              <input required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full pl-9 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" type="text" />
-                          </div>
-                      </div>
-
-                      <div className="space-y-1">
-                          <label className="text-xs font-medium text-gray-700 dark:text-gray-300">Phân quyền</label>
-                          <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as Role})} className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none">
-                              <option value={Role.STAFF}>Nhân viên (Giới hạn quyền)</option>
-                              <option value={Role.ADMIN}>Quản trị viên (Toàn quyền)</option>
-                          </select>
-                      </div>
-
-                      <button type="submit" className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 transition-colors mt-4 shadow-lg shadow-indigo-200 dark:shadow-none">
-                          {editingId ? 'Lưu thay đổi' : 'Tạo tài khoản'}
-                      </button>
+                      <input required placeholder="Họ tên" value={formData.fullName} onChange={e => setFormData({...formData, fullName: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-gray-700 rounded-2xl border-none outline-none font-bold" />
+                      <input required disabled={!!editingId} placeholder="Username" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-gray-700 rounded-2xl border-none outline-none font-bold disabled:opacity-50" />
+                      <input required placeholder="Password" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-gray-50 dark:bg-gray-700 rounded-2xl border-none outline-none font-bold" />
+                      <select value={formData.role} onChange={e => setFormData({...formData, role: e.target.value as Role})} className="w-full p-4 bg-gray-50 dark:bg-gray-700 rounded-2xl border-none outline-none font-bold">
+                          <option value={Role.STAFF}>Nhân viên</option>
+                          <option value={Role.ADMIN}>Admin</option>
+                      </select>
+                      <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold shadow-lg">Lưu</button>
+                      <button type="button" onClick={() => setShowModal(false)} className="w-full py-4 bg-transparent text-gray-500 font-bold">Hủy</button>
                   </form>
               </div>
-          </div>,
-          document.body
+          </div>, document.body
       )}
     </div>
   );
