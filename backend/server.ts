@@ -1,339 +1,534 @@
 
 import express from 'express';
 import cors from 'cors';
+// @ts-ignore
+import { PrismaClient } from '@prisma/client';
 
 const app = express();
 const PORT = 4000;
+const prisma = new PrismaClient();
 
 app.use(cors() as any);
 app.use(express.json() as any);
 
-// In-memory Mock Data Storage (Placeholder for Real DB)
-let users: any[] = [
-  { id: 'u1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: 'ADMIN' },
-  { id: 'u2', username: 'staff', password: '123', fullName: 'Nhân Viên A', role: 'STAFF' },
-];
-let rooms: any[] = [];
-let students: any[] = [];
-let buildings: any[] = [];
-let assets: any[] = [];
-let bills: any[] = [];
+// --- HELPER: MAP DB (snake_case) -> FRONTEND (camelCase) ---
+// Do database bạn dùng snake_case (room_id) nhưng frontend dùng camelCase (roomId)
+const mapUser = (u: any) => ({
+    id: u.id,
+    username: u.username,
+    password: u.password,
+    fullName: u.full_name,
+    role: u.role
+});
 
-// Helper to generate IDs
-const genId = () => Math.random().toString(36).substring(2, 9);
+const mapRoom = (r: any) => ({
+    id: r.id,
+    name: r.name,
+    buildingId: r.building_id,
+    status: r.status,
+    maxCapacity: r.max_capacity,
+    currentCapacity: r.current_capacity,
+    pricePerMonth: Number(r.price_per_month),
+    createdAt: r.created_at
+});
 
-// --- SHARED LOGIC ---
+const mapStudent = (s: any) => ({
+    id: s.id,
+    studentCode: s.student_code,
+    name: s.name,
+    dob: s.dob ? new Date(s.dob).toISOString().split('T')[0] : null,
+    gender: s.gender,
+    phone: s.phone,
+    roomId: s.room_id,
+    university: s.university
+});
 
-// 1. Calculate Room Status
-const updateRoomStatusAuto = (room: any) => {
-    // If room is Maintenance but occupied, force revert (Safety rule)
-    if (room.currentCapacity > 0 && room.status === 'MAINTENANCE') {
-        room.status = 'AVAILABLE';
-    }
+const mapBill = (b: any) => ({
+    id: b.id,
+    roomId: b.room_id,
+    month: b.month,
+    electricIndexOld: b.electric_index_old,
+    electricIndexNew: b.electric_index_new,
+    waterIndexOld: b.water_index_old,
+    waterIndexNew: b.water_index_new,
+    roomFee: Number(b.room_fee),
+    totalAmount: Number(b.total_amount),
+    status: b.status,
+    dueDate: b.due_date,
+    paymentDate: b.payment_date,
+    createdAt: b.created_at
+});
 
-    // Only update status if NOT maintenance
-    if (room.status !== 'MAINTENANCE') {
-        if (room.currentCapacity >= room.maxCapacity) {
-            room.status = 'FULL';
-        } else {
-            room.status = 'AVAILABLE';
-        }
-    }
-};
+const mapAsset = (a: any) => ({
+    id: a.id,
+    name: a.name,
+    roomId: a.room_id,
+    status: a.status,
+    value: Number(a.value)
+});
 
-// 2. Calculate Bill Details
-const calculateBillDetails = (data: any) => {
-    const elec = Math.max(0, (data.electricIndexNew - data.electricIndexOld) * 3500);
-    const water = Math.max(0, (data.waterIndexNew - data.waterIndexOld) * 10000);
-    const totalAmount = elec + water + Number(data.roomFee);
-
-    // Calculate Due Date if not provided (default 10th of next month relative to billing month)
-    let finalDueDate = data.dueDate;
-    if (!finalDueDate && data.month) {
-        const [year, m] = data.month.split('-');
-        // Default to 10th day
-        finalDueDate = new Date(Number(year), Number(m) - 1, 10, 23, 59, 59).toISOString();
-    }
-    
-    return { totalAmount, dueDate: finalDueDate };
-};
-
+// Helper to generate IDs (fallback if DB doesn't auto-generate, though we usually let DB handle it or use UUID)
+// Since schema uses VARCHAR(50), we generate string IDs.
+const genId = () => Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 
 // --- AUTH ---
-app.post('/api/login', (req: any, res: any) => {
+app.post('/api/login', async (req: any, res: any) => {
   const { username, password } = req.body;
-  const user = users.find(u => u.username === username && u.password === password);
-  if (user) {
-    res.json(user);
-  } else {
-    res.status(401).json({ message: 'Tên đăng nhập hoặc mật khẩu không đúng' });
+  try {
+      // FIX: prisma.users instead of prisma.user
+      const user = await prisma.users.findUnique({
+          where: { username } // Username is unique
+      });
+      
+      if (user && user.password === password) {
+        res.json(mapUser(user));
+      } else {
+        res.status(401).json({ message: 'Tên đăng nhập hoặc mật khẩu không đúng' });
+      }
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Database error' });
   }
 });
 
 // --- DASHBOARD STATS ---
-app.get('/api/stats', (req: any, res: any) => {
-    const totalRooms = rooms.length;
-    const totalStudents = students.length;
-    
-    const occupiedRooms = rooms.filter(r => r.currentCapacity > 0).length;
-    const fullRooms = rooms.filter(r => r.currentCapacity >= r.maxCapacity).length;
-    const availableRooms = totalRooms - fullRooms;
+app.get('/api/stats', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.rooms, prisma.students
+        const totalRooms = await prisma.rooms.count();
+        const totalStudents = await prisma.students.count();
+        
+        // Manual count or use specific queries
+        const rooms = await prisma.rooms.findMany();
+        const occupiedRooms = rooms.filter((r: any) => r.current_capacity > 0).length;
+        const fullRooms = rooms.filter((r: any) => r.status === 'FULL').length;
+        const availableRooms = rooms.filter((r: any) => r.status === 'AVAILABLE').length;
 
-    const totalSlots = rooms.reduce((acc, r) => acc + (r.maxCapacity || 0), 0);
-    const usedSlots = rooms.reduce((acc, r) => acc + (r.currentCapacity || 0), 0);
-    const occupancyRate = totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
+        const totalSlots = rooms.reduce((acc: number, r: any) => acc + (r.max_capacity || 0), 0);
+        const usedSlots = rooms.reduce((acc: number, r: any) => acc + (r.current_capacity || 0), 0);
+        const occupancyRate = totalSlots > 0 ? Math.round((usedSlots / totalSlots) * 100) : 0;
 
-    res.json({
-      totalRooms,
-      occupiedRooms,
-      fullRooms,
-      availableRooms,
-      totalStudents,
-      occupancyRate
-    });
+        res.json({
+          totalRooms,
+          occupiedRooms,
+          fullRooms,
+          availableRooms,
+          totalStudents,
+          occupancyRate
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error fetching stats' });
+    }
 });
 
-app.get('/api/stats/revenue', (req: any, res: any) => {
-    const paidBills = bills.filter(b => b.status === 'PAID').sort((a, b) => a.month.localeCompare(b.month));
+app.get('/api/stats/revenue', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.bills
+        const bills = await prisma.bills.findMany({
+            where: { status: 'PAID' },
+            orderBy: { month: 'asc' }
+        });
 
-    const revenueMap = new Map();
-    paidBills.forEach(bill => {
-      if (!revenueMap.has(bill.month)) {
-        revenueMap.set(bill.month, { month: bill.month, electricity: 0, water: 0, roomFee: 0 });
-      }
-      const data = revenueMap.get(bill.month);
-      data.electricity += (bill.electricIndexNew - bill.electricIndexOld) * 3500;
-      data.water += (bill.waterIndexNew - bill.waterIndexOld) * 10000;
-      data.roomFee += bill.roomFee;
-    });
+        const revenueMap = new Map();
+        bills.forEach((bill: any) => {
+          if (!revenueMap.has(bill.month)) {
+            revenueMap.set(bill.month, { month: bill.month, electricity: 0, water: 0, roomFee: 0 });
+          }
+          const data = revenueMap.get(bill.month);
+          // Handle potential null values from DB
+          const eNew = bill.electric_index_new || 0;
+          const eOld = bill.electric_index_old || 0;
+          const wNew = bill.water_index_new || 0;
+          const wOld = bill.water_index_old || 0;
 
-    res.json(Array.from(revenueMap.values()));
+          data.electricity += (eNew - eOld) * 3500;
+          data.water += (wNew - wOld) * 10000;
+          data.roomFee += Number(bill.room_fee);
+        });
+
+        res.json(Array.from(revenueMap.values()));
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching revenue' });
+    }
 });
 
 // --- ROOMS ---
-app.get('/api/rooms', (req: any, res: any) => {
-  res.json(rooms.sort((a, b) => a.name.localeCompare(b.name)));
+app.get('/api/rooms', async (req: any, res: any) => {
+  try {
+      // FIX: prisma.rooms
+      const rooms = await prisma.rooms.findMany({ orderBy: { name: 'asc' } });
+      res.json(rooms.map(mapRoom));
+  } catch (error) { res.status(500).send(error); }
 });
 
-app.post('/api/rooms', (req: any, res: any) => {
-  const room = { id: genId(), currentCapacity: 0, ...req.body };
-  
-  // Validation: Initial status Check
-  if (room.status === 'MAINTENANCE' && room.currentCapacity > 0) room.status = 'AVAILABLE';
-  
-  rooms.push(room);
-  res.json(room);
+app.post('/api/rooms', async (req: any, res: any) => {
+  try {
+      // FIX: prisma.rooms
+      const room = await prisma.rooms.create({
+          data: {
+              id: genId(),
+              name: req.body.name,
+              building_id: req.body.buildingId,
+              status: req.body.status || 'AVAILABLE',
+              max_capacity: req.body.maxCapacity,
+              price_per_month: req.body.pricePerMonth,
+              current_capacity: 0
+          }
+      });
+      res.json(mapRoom(room));
+  } catch (error) { res.status(500).send(error); }
 });
 
-app.put('/api/rooms/:id', (req: any, res: any) => {
-  const idx = rooms.findIndex(r => r.id === req.params.id);
-  if (idx > -1) {
-      const currentRoom = rooms[idx];
-      const updates = req.body;
+app.put('/api/rooms/:id', async (req: any, res: any) => {
+    try {
+        const data: any = {};
+        if (req.body.name) data.name = req.body.name;
+        if (req.body.status) data.status = req.body.status;
+        if (req.body.maxCapacity) data.max_capacity = req.body.maxCapacity;
+        if (req.body.pricePerMonth) data.price_per_month = req.body.pricePerMonth;
+        if (req.body.buildingId) data.building_id = req.body.buildingId;
 
-      // Rule: Cannot set MAINTENANCE if occupied
-      if (updates.status === 'MAINTENANCE' && currentRoom.currentCapacity > 0) {
-          return res.status(400).json({ message: "Không thể bảo trì phòng đang có người ở." });
-      }
-
-      // Rule: Cannot shrink capacity below current residents
-      if (updates.maxCapacity !== undefined && updates.maxCapacity < currentRoom.currentCapacity) {
-          return res.status(400).json({ message: "Sức chứa mới nhỏ hơn số người hiện tại." });
-      }
-
-      rooms[idx] = { ...rooms[idx], ...updates };
-      
-      // Auto-calc status based on new capacity/status
-      updateRoomStatusAuto(rooms[idx]);
-      
-      res.json(rooms[idx]);
-  } else {
-      res.status(404).json({message: 'Phòng không tồn tại'});
-  }
+        // FIX: prisma.rooms
+        const room = await prisma.rooms.update({
+            where: { id: req.params.id },
+            data
+        });
+        res.json(mapRoom(room));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.delete('/api/rooms/:id', (req: any, res: any) => {
-    const hasStudents = students.some(s => s.roomId === req.params.id);
-    if (hasStudents) {
-         res.status(400).json({ message: "Phòng đang có người, không thể xóa" });
-         return;
-    }
-    
-    // Cleanup related data
-    assets = assets.filter(a => a.roomId !== req.params.id);
-    bills = bills.filter(b => b.roomId !== req.params.id);
-    rooms = rooms.filter(r => r.id !== req.params.id);
-    
-    res.json({ success: true });
+app.delete('/api/rooms/:id', async (req: any, res: any) => {
+    try {
+        // Logic check: occupants
+        // FIX: prisma.students
+        const count = await prisma.students.count({ where: { room_id: req.params.id } });
+        if (count > 0) return res.status(400).json({ message: "Phòng đang có người, không thể xóa" });
+
+        // FIX: prisma.rooms
+        await prisma.rooms.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
 // --- STUDENTS ---
-app.get('/api/students', (req: any, res: any) => {
-  res.json(students.sort((a, b) => a.name.localeCompare(b.name)));
+app.get('/api/students', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.students
+        const students = await prisma.students.findMany({ orderBy: { name: 'asc' } });
+        res.json(students.map(mapStudent));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.post('/api/students', (req: any, res: any) => {
-  const { roomId, studentCode } = req.body;
-  const room = rooms.find(r => r.id === roomId);
-  
-  if (!room) { res.status(404).json({ message: "Phòng không tồn tại" }); return; }
-  if (room.status === 'MAINTENANCE') { res.status(400).json({ message: "Phòng đang bảo trì" }); return; }
-  if (room.currentCapacity >= room.maxCapacity) { res.status(400).json({ message: "Phòng đã đầy" }); return; }
-  if (students.some(s => s.studentCode === studentCode)) { res.status(400).json({ message: "Mã sinh viên đã tồn tại" }); return; }
+app.post('/api/students', async (req: any, res: any) => {
+    try {
+        const { roomId, studentCode } = req.body;
+        
+        // Logic checks
+        // FIX: prisma.rooms
+        const room = await prisma.rooms.findUnique({ where: { id: roomId } });
+        if (!room) return res.status(404).json({ message: "Phòng không tồn tại" });
+        if (room.status === 'MAINTENANCE') return res.status(400).json({ message: "Phòng đang bảo trì" });
+        if (room.current_capacity >= room.max_capacity) return res.status(400).json({ message: "Phòng đã đầy" });
+        
+        // FIX: prisma.students
+        const exists = await prisma.students.findUnique({ where: { student_code: studentCode } });
+        if (exists) return res.status(400).json({ message: "Mã sinh viên đã tồn tại" });
 
-  const student = { id: genId(), ...req.body };
-  students.push(student);
-  
-  room.currentCapacity += 1;
-  updateRoomStatusAuto(room);
-
-  res.json(student);
+        const student = await prisma.students.create({
+            data: {
+                id: genId(),
+                student_code: req.body.studentCode,
+                name: req.body.name,
+                dob: new Date(req.body.dob),
+                gender: req.body.gender,
+                phone: req.body.phone,
+                room_id: req.body.roomId,
+                university: req.body.university
+            }
+        });
+        
+        // Trigger automatically updates room capacity in DB via SQL Trigger, but we return student here
+        res.json(mapStudent(student));
+    } catch (error) { 
+        console.error(error);
+        res.status(500).send({ message: 'Lỗi server' }); 
+    }
 });
 
-app.put('/api/students/:id', (req: any, res: any) => {
-  const { id } = req.params;
-  const { roomId: newRoomId } = req.body;
-  const sIdx = students.findIndex(s => s.id === id);
+app.put('/api/students/:id', async (req: any, res: any) => {
+    try {
+        const data: any = {};
+        if (req.body.name) data.name = req.body.name;
+        if (req.body.phone) data.phone = req.body.phone;
+        if (req.body.university) data.university = req.body.university;
+        if (req.body.gender) data.gender = req.body.gender;
+        if (req.body.dob) data.dob = new Date(req.body.dob);
+        if (req.body.roomId) {
+            // Check new room validity
+            // FIX: prisma.rooms
+            const newRoom = await prisma.rooms.findUnique({ where: { id: req.body.roomId } });
+            if (!newRoom) return res.status(404).json({ message: "Phòng mới không tồn tại" });
+            
+            // Check logic only if MOVING to a different room
+            // FIX: prisma.students
+            const currentStudent = await prisma.students.findUnique({ where: { id: req.params.id }});
+            if (currentStudent && currentStudent.room_id !== req.body.roomId) {
+                if (newRoom.status === 'MAINTENANCE') return res.status(400).json({ message: "Phòng mới đang bảo trì" });
+                if (newRoom.current_capacity >= newRoom.max_capacity) return res.status(400).json({ message: "Phòng mới đã đầy" });
+            }
+            
+            data.room_id = req.body.roomId;
+        }
 
-  if (sIdx === -1) { res.status(404).json({ message: "SV không tồn tại" }); return; }
-  
-  const currentStudent = students[sIdx];
-  const oldRoomId = currentStudent.roomId;
-  
-  // Logic: Change Room
-  if (newRoomId && newRoomId !== oldRoomId) {
-      const oldRoom = rooms.find(r => r.id === oldRoomId);
-      const newRoom = rooms.find(r => r.id === newRoomId);
-      
-      // Validate New Room
-      if (!newRoom) { res.status(404).json({ message: "Phòng mới không tồn tại" }); return; }
-      if (newRoom.status === 'MAINTENANCE') { res.status(400).json({ message: "Phòng mới đang bảo trì" }); return; }
-      if (newRoom.currentCapacity >= newRoom.maxCapacity) { res.status(400).json({ message: "Phòng mới đã đầy" }); return; }
-
-      // Update Counts
-      if(oldRoom) {
-          oldRoom.currentCapacity = Math.max(0, oldRoom.currentCapacity - 1);
-          updateRoomStatusAuto(oldRoom);
-      }
-
-      newRoom.currentCapacity += 1;
-      updateRoomStatusAuto(newRoom);
-  }
-
-  students[sIdx] = { ...students[sIdx], ...req.body };
-  res.json({ success: true });
+        // FIX: prisma.students
+        const student = await prisma.students.update({
+            where: { id: req.params.id },
+            data
+        });
+        res.json(mapStudent(student));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.delete('/api/students/:id', (req: any, res: any) => {
-  const s = students.find(s => s.id === req.params.id);
-  if (!s) { res.status(404).json({ message: "Không tìm thấy SV" }); return; }
-  
-  const room = rooms.find(r => r.id === s.roomId);
-  if(room) {
-      room.currentCapacity = Math.max(0, room.currentCapacity - 1);
-      updateRoomStatusAuto(room);
-  }
-  
-  students = students.filter(stu => stu.id !== req.params.id);
-  res.json({ success: true });
+app.delete('/api/students/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.students
+        await prisma.students.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
 // --- BUILDINGS ---
-app.get('/api/buildings', (req: any, res: any) => { res.json(buildings); });
-app.post('/api/buildings', (req: any, res: any) => { const b = { id: genId(), ...req.body }; buildings.push(b); res.json(b); });
-app.put('/api/buildings/:id', (req: any, res: any) => { 
-    const idx = buildings.findIndex(b => b.id === req.params.id);
-    if(idx > -1) { buildings[idx] = {...buildings[idx], ...req.body}; res.json(buildings[idx]); }
-    else res.status(404).json({ message: "Not found" });
+app.get('/api/buildings', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.buildings
+        const data = await prisma.buildings.findMany();
+        res.json(data);
+    } catch (error) { res.status(500).send(error); }
 });
-app.delete('/api/buildings/:id', (req: any, res: any) => {
-    if(rooms.some(r => r.buildingId === req.params.id)) {
+app.post('/api/buildings', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.buildings
+        const data = await prisma.buildings.create({
+            data: { id: genId(), name: req.body.name }
+        });
+        res.json(data);
+    } catch (error) { res.status(500).send(error); }
+});
+app.put('/api/buildings/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.buildings
+        const data = await prisma.buildings.update({
+            where: { id: req.params.id },
+            data: { name: req.body.name }
+        });
+        res.json(data);
+    } catch (error) { res.status(500).send(error); }
+});
+app.delete('/api/buildings/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.buildings
+        await prisma.buildings.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { 
+        // Likely foreign key constraint
         res.status(400).json({ message: "Không thể xóa tòa nhà đang có phòng." });
-        return;
     }
-    buildings = buildings.filter(b => b.id !== req.params.id);
-    res.json({ success: true });
 });
 
 // --- ASSETS ---
-app.get('/api/assets', (req: any, res: any) => { res.json(assets); });
-app.post('/api/assets', (req: any, res: any) => { const a = { id: genId(), ...req.body }; assets.push(a); res.json(a); });
-app.put('/api/assets/:id', (req: any, res: any) => {
-    const idx = assets.findIndex(a => a.id === req.params.id);
-    if(idx > -1) { assets[idx] = {...assets[idx], ...req.body}; res.json(assets[idx]); }
-    else res.status(404).json({ message: "Not found" });
+app.get('/api/assets', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.assets
+        const data = await prisma.assets.findMany();
+        res.json(data.map(mapAsset));
+    } catch (error) { res.status(500).send(error); }
 });
-app.delete('/api/assets/:id', (req: any, res: any) => {
-    assets = assets.filter(a => a.id !== req.params.id);
-    res.json({ success: true });
+app.post('/api/assets', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.assets
+        const data = await prisma.assets.create({
+            data: {
+                id: genId(),
+                name: req.body.name,
+                room_id: req.body.roomId,
+                status: req.body.status,
+                value: req.body.value
+            }
+        });
+        res.json(mapAsset(data));
+    } catch (error) { res.status(500).send(error); }
+});
+app.put('/api/assets/:id', async (req: any, res: any) => {
+    try {
+        const updateData: any = {};
+        if (req.body.name) updateData.name = req.body.name;
+        if (req.body.status) updateData.status = req.body.status;
+        if (req.body.roomId) updateData.room_id = req.body.roomId;
+        if (req.body.value) updateData.value = req.body.value;
+
+        // FIX: prisma.assets
+        const data = await prisma.assets.update({
+            where: { id: req.params.id },
+            data: updateData
+        });
+        res.json(mapAsset(data));
+    } catch (error) { res.status(500).send(error); }
+});
+app.delete('/api/assets/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.assets
+        await prisma.assets.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
 // --- BILLS ---
-app.get('/api/bills', (req: any, res: any) => { res.json(bills); });
-
-app.post('/api/bills', (req: any, res: any) => {
-  const { totalAmount, dueDate } = calculateBillDetails(req.body);
-
-  const bill = { 
-      id: genId(), 
-      ...req.body, 
-      totalAmount, 
-      dueDate, 
-      status: 'UNPAID', 
-      createdAt: new Date().toISOString() 
-  };
-  bills.push(bill);
-  res.json(bill);
+app.get('/api/bills', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.bills
+        const data = await prisma.bills.findMany({ orderBy: { created_at: 'desc' } });
+        res.json(data.map(mapBill));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.put('/api/bills/:id', (req: any, res: any) => {
-  const idx = bills.findIndex(b => b.id === req.params.id);
-  if(idx === -1) { res.status(404).json({ message: "Not found" }); return; }
-  
-  // Merge existing data with new data to perform calculation
-  const mergedData = { ...bills[idx], ...req.body };
-  const { totalAmount, dueDate } = calculateBillDetails(mergedData);
-  
-  bills[idx] = { ...mergedData, totalAmount, dueDate };
-  res.json(bills[idx]);
+app.post('/api/bills', async (req: any, res: any) => {
+    try {
+        const elec = Math.max(0, (req.body.electricIndexNew - req.body.electricIndexOld) * 3500);
+        const water = Math.max(0, (req.body.waterIndexNew - req.body.waterIndexOld) * 10000);
+        const total = elec + water + Number(req.body.roomFee);
+
+        let finalDueDate = req.body.dueDate;
+        if (!finalDueDate && req.body.month) {
+            const [y, m] = req.body.month.split('-');
+            finalDueDate = new Date(Number(y), Number(m)-1, 10).toISOString();
+        }
+
+        // FIX: prisma.bills
+        const bill = await prisma.bills.create({
+            data: {
+                id: genId(),
+                room_id: req.body.roomId,
+                month: req.body.month,
+                electric_index_old: req.body.electricIndexOld,
+                electric_index_new: req.body.electricIndexNew,
+                water_index_old: req.body.waterIndexOld,
+                water_index_new: req.body.waterIndexNew,
+                room_fee: req.body.roomFee,
+                total_amount: total,
+                status: 'UNPAID',
+                due_date: new Date(finalDueDate),
+                created_at: new Date()
+            }
+        });
+        res.json(mapBill(bill));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.post('/api/bills/:id/pay', (req: any, res: any) => {
-  const idx = bills.findIndex(b => b.id === req.params.id);
-  if(idx > -1) { bills[idx].status = 'PAID'; bills[idx].paymentDate = new Date().toISOString(); }
-  res.json({ success: true });
+app.put('/api/bills/:id', async (req: any, res: any) => {
+    try {
+        // Re-calculate total
+        const elec = Math.max(0, (req.body.electricIndexNew - req.body.electricIndexOld) * 3500);
+        const water = Math.max(0, (req.body.waterIndexNew - req.body.waterIndexOld) * 10000);
+        const total = elec + water + Number(req.body.roomFee);
+
+        // FIX: prisma.bills
+        const bill = await prisma.bills.update({
+            where: { id: req.params.id },
+            data: {
+                electric_index_old: req.body.electricIndexOld,
+                electric_index_new: req.body.electricIndexNew,
+                water_index_old: req.body.waterIndexOld,
+                water_index_new: req.body.waterIndexNew,
+                room_fee: req.body.roomFee,
+                total_amount: total,
+                due_date: new Date(req.body.dueDate)
+            }
+        });
+        res.json(mapBill(bill));
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.post('/api/bills/:id/unpay', (req: any, res: any) => {
-  const idx = bills.findIndex(b => b.id === req.params.id);
-  if(idx > -1) { bills[idx].status = 'UNPAID'; bills[idx].paymentDate = null; }
-  res.json({ success: true });
+app.post('/api/bills/:id/pay', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.bills
+        await prisma.bills.update({
+            where: { id: req.params.id },
+            data: { status: 'PAID', payment_date: new Date() }
+        });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
-app.delete('/api/bills/:id', (req: any, res: any) => {
-  bills = bills.filter(b => b.id !== req.params.id);
-  res.json({ success: true });
+app.post('/api/bills/:id/unpay', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.bills
+        await prisma.bills.update({
+            where: { id: req.params.id },
+            data: { status: 'UNPAID', payment_date: null }
+        });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
+});
+
+app.delete('/api/bills/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.bills
+        await prisma.bills.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
 // --- USERS ---
-app.get('/api/users', (req: any, res: any) => { res.json(users); });
-app.post('/api/users', (req: any, res: any) => { 
-    if(users.some(u => u.username === req.body.username)) {
+app.get('/api/users', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.users
+        const data = await prisma.users.findMany();
+        res.json(data.map(mapUser));
+    } catch (error) { res.status(500).send(error); }
+});
+
+app.post('/api/users', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.users
+        const user = await prisma.users.create({
+            data: {
+                id: genId(),
+                username: req.body.username,
+                password: req.body.password,
+                full_name: req.body.fullName,
+                role: req.body.role
+            }
+        });
+        res.json(mapUser(user));
+    } catch (error) { 
+        // Unique constraint on username
         res.status(400).json({ message: "Username exists" });
-        return;
     }
-    const u = { id: genId(), ...req.body }; 
-    users.push(u); 
-    res.json(u); 
 });
-app.put('/api/users/:id', (req: any, res: any) => {
-    const idx = users.findIndex(u => u.id === req.params.id);
-    if(idx > -1) { users[idx] = {...users[idx], ...req.body}; res.json(users[idx]); }
-    else res.status(404).json({ message: "Not found" });
+
+app.put('/api/users/:id', async (req: any, res: any) => {
+    try {
+        const data: any = {};
+        if (req.body.fullName) data.full_name = req.body.fullName;
+        if (req.body.password) data.password = req.body.password;
+        if (req.body.role) data.role = req.body.role;
+
+        // FIX: prisma.users
+        const user = await prisma.users.update({
+            where: { id: req.params.id },
+            data
+        });
+        res.json(mapUser(user));
+    } catch (error) { res.status(500).send(error); }
 });
-app.delete('/api/users/:id', (req: any, res: any) => {
-    users = users.filter(u => u.id !== req.params.id);
-    res.json({ success: true });
+
+app.delete('/api/users/:id', async (req: any, res: any) => {
+    try {
+        // FIX: prisma.users
+        await prisma.users.delete({ where: { id: req.params.id } });
+        res.json({ success: true });
+    } catch (error) { res.status(500).send(error); }
 });
 
 app.listen(PORT, () => {

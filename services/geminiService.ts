@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { DashboardStats } from "../types";
 
@@ -10,7 +11,6 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `
-      Bạn là trợ lý AI thông minh cho Hệ thống Quản lý Nhà trọ / Ký túc xá.
       Hãy phân tích các số liệu thống kê dưới đây và cung cấp một bản tóm tắt điều hành ngắn gọn, chuyên nghiệp (2-3 câu)
       cùng với 3 đề xuất hành động cụ thể để cải thiện tỷ lệ lấp đầy hoặc tăng doanh thu.
       
@@ -23,6 +23,9 @@ export const generateDashboardReport = async (stats: DashboardStats): Promise<st
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
+      config: {
+        systemInstruction: "Bạn là trợ lý AI thông minh cho Hệ thống Quản lý Nhà trọ / Ký túc xá.",
+      },
     });
 
     return response.text || "Không thể tạo báo cáo.";
