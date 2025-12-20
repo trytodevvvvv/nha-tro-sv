@@ -1,1 +1,76 @@
-���
+// Server/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id       String @id @default(uuid())
+  username String @unique
+  password String
+  fullName String
+  role     String // ADMIN, STAFF
+}
+
+model Building {
+  id    String @id @default(uuid())
+  name  String
+  rooms Room[]
+}
+
+model Room {
+  id              String    @id @default(uuid())
+  name            String
+  buildingId      String
+  building        Building  @relation(fields: [buildingId], references: [id])
+  status          String    // AVAILABLE, FULL, MAINTENANCE
+  maxCapacity     Int
+  currentCapacity Int       @default(0)
+  pricePerMonth   Float
+  students        Student[]
+  assets          Asset[]
+  bills           Bill[]
+}
+
+model Student {
+  id          String  @id @default(uuid())
+  studentCode String  @unique 
+  name        String
+  dob         String
+  gender      String
+  phone       String
+  university  String?
+  roomId      String
+  room        Room    @relation(fields: [roomId], references: [id])
+}
+
+model Asset {
+  id     String @id @default(uuid())
+  name   String
+  value  Float
+  status String // GOOD, BROKEN, REPAIRING
+  roomId String
+  room   Room   @relation(fields: [roomId], references: [id])
+}
+
+model Bill {
+  id               String   @id @default(uuid())
+  month            String
+  electricIndexOld Int
+  electricIndexNew Int
+  waterIndexOld    Int
+  waterIndexNew    Int
+  roomFee          Float
+  totalAmount      Float
+  status           String   // PAID, UNPAID
+  dueDate          String
+  paymentDate      String?
+  createdAt        DateTime @default(now())
+  roomId           String
+  room             Room     @relation(fields: [roomId], references: [id])
+}
