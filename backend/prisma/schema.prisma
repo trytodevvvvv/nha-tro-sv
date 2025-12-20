@@ -1,4 +1,4 @@
-// Server/prisma/schema.prisma
+// backend/prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -9,68 +9,113 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id       String @id @default(uuid())
-  username String @unique
-  password String
-  fullName String
-  role     String // ADMIN, STAFF
+// --- ENUMS (Phải khớp với SQL) ---
+
+enum role_enum {
+  ADMIN
+  STAFF
 }
 
-model Building {
-  id    String @id @default(uuid())
-  name  String
-  rooms Room[]
+enum room_status_enum {
+  AVAILABLE
+  FULL
+  MAINTENANCE
 }
 
-model Room {
-  id              String    @id @default(uuid())
-  name            String
-  buildingId      String
-  building        Building  @relation(fields: [buildingId], references: [id])
-  status          String    // AVAILABLE, FULL, MAINTENANCE
-  maxCapacity     Int
-  currentCapacity Int       @default(0)
-  pricePerMonth   Float
-  students        Student[]
-  assets          Asset[]
-  bills           Bill[]
+enum asset_status_enum {
+  GOOD
+  BROKEN
+  REPAIRING
 }
 
-model Student {
-  id          String  @id @default(uuid())
-  studentCode String  @unique 
-  name        String
-  dob         String
-  gender      String
-  phone       String
-  university  String?
-  roomId      String
-  room        Room    @relation(fields: [roomId], references: [id])
+enum gender_enum {
+  Male
+  Female
 }
 
-model Asset {
-  id     String @id @default(uuid())
-  name   String
-  value  Float
-  status String // GOOD, BROKEN, REPAIRING
-  roomId String
-  room   Room   @relation(fields: [roomId], references: [id])
+enum bill_status_enum {
+  PAID
+  UNPAID
 }
 
-model Bill {
-  id               String   @id @default(uuid())
-  month            String
-  electricIndexOld Int
-  electricIndexNew Int
-  waterIndexOld    Int
-  waterIndexNew    Int
-  roomFee          Float
-  totalAmount      Float
-  status           String   // PAID, UNPAID
-  dueDate          String
-  paymentDate      String?
-  createdAt        DateTime @default(now())
-  roomId           String
-  room             Room     @relation(fields: [roomId], references: [id])
+// --- MODELS (BẢNG) ---
+
+model users {
+  id         String    @id @db.VarChar(50)
+  username   String    @unique @db.VarChar(50)
+  password   String    @db.VarChar(255)
+  full_name  String    @db.VarChar(100)
+  role       role_enum @default(STAFF)
+  created_at DateTime? @default(now()) @db.Timestamp
+}
+
+model buildings {
+  id    String  @id @db.VarChar(50)
+  name  String  @db.VarChar(100)
+  
+  // Quan hệ ngược (tùy chọn, để Prisma hiểu quan hệ)
+  rooms rooms[]
+}
+
+model rooms {
+  id               String           @id @db.VarChar(50)
+  name             String           @db.VarChar(50)
+  building_id      String?          @db.VarChar(50)
+  status           room_status_enum @default(AVAILABLE)
+  max_capacity     Int              @default(4)
+  current_capacity Int              @default(0)
+  price_per_month  Decimal          @default(0) @db.Decimal(12, 0)
+  created_at       DateTime?        @default(now()) @db.Timestamp
+
+  // Quan hệ
+  building         buildings?       @relation(fields: [building_id], references: [id], onDelete: Cascade)
+  students         students[]
+  bills            bills[]
+  assets           assets[]
+}
+
+model students {
+  id           String      @id @db.VarChar(50)
+  student_code String      @unique @db.VarChar(20)
+  name         String      @db.VarChar(100)
+  dob          DateTime?   @db.Date
+  gender       gender_enum
+  phone        String?     @db.VarChar(20)
+  room_id      String?     @db.VarChar(50)
+  university   String?     @db.VarChar(150)
+  created_at   DateTime?   @default(now()) @db.Timestamp
+
+  // Quan hệ
+  room         rooms?      @relation(fields: [room_id], references: [id])
+}
+
+model assets {
+  id         String            @id @db.VarChar(50)
+  name       String            @db.VarChar(150)
+  room_id    String?           @db.VarChar(50)
+  status     asset_status_enum @default(GOOD)
+  value      Decimal?          @default(0) @db.Decimal(12, 0)
+  created_at DateTime?         @default(now()) @db.Timestamp
+
+  // Quan hệ
+  room       rooms?            @relation(fields: [room_id], references: [id], onDelete: Cascade)
+}
+
+model bills {
+  id                 String           @id @db.VarChar(50)
+  room_id            String?          @db.VarChar(50)
+  month              String           @db.VarChar(7)
+  electric_index_old Int?             @default(0)
+  electric_index_new Int?             @default(0)
+  water_index_old    Int?             @default(0)
+  water_index_new    Int?             @default(0)
+  room_fee           Decimal          @db.Decimal(12, 0)
+  total_amount       Decimal          @db.Decimal(12, 0)
+  status             bill_status_enum @default(UNPAID)
+  due_date           DateTime?        @db.Timestamp
+  payment_date       DateTime?        @db.Timestamp
+  created_at         DateTime?        @default(now()) @db.Timestamp
+
+  // Quan hệ
+  room               rooms?           @relation(fields: [room_id], references: [id], onDelete: Cascade)
 }
